@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://david-bassler.github.io/gerds-rezepte/sitemap.xml

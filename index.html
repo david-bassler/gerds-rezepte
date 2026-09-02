@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Gerds Rezepte – ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche mit Küchenwissen und dynamischer Mengenberechnung.">
+  <meta name="theme-color" content="#29483a">
+  <meta name="color-scheme" content="light">
+  <link rel="canonical" href="https://david-bassler.github.io/gerds-rezepte/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="de_DE">
+  <meta property="og:title" content="Gerds Rezepte">
+  <meta property="og:description" content="Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche.">
+  <meta property="og:url" content="https://david-bassler.github.io/gerds-rezepte/">
+  <meta property="og:image" content="https://david-bassler.github.io/gerds-rezepte/assets/images/hero-kitchen.webp">
+  <meta property="og:image:alt" content="Illustration mit Kochgeschirr, Kräutern und Küchenzutaten">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Gerds Rezepte">
+  <meta name="twitter:description" content="Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche.">
+  <meta name="twitter:image" content="https://david-bassler.github.io/gerds-rezepte/assets/images/hero-kitchen.webp">
+  <title>Gerds Rezepte</title>
+  <link rel="icon" href="assets/images/logo-kitchen.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/images/logo-kitchen.svg" type="image/svg+xml">
+  
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preload" as="image" href="assets/images/hero-kitchen.webp">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <button type="button" class="brand" data-route="recipes" aria-label="Zur Rezeptübersicht">
+        <span class="brand-mark" aria-hidden="true"><img src="assets/images/logo-kitchen.svg" alt=""></span>
+        <span class="brand-copy"><strong>Gerds Rezepte</strong><small>Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche</small></span>
+      </button>
+      <nav class="nav" aria-label="Hauptnavigation">
+        <button type="button" data-route="recipes">Rezepte</button>
+        <button type="button" data-route="knowledge">Küchenwissen</button>
+      </nav>
+    </div>
+  </header>
+  <main id="app"></main>
+  <footer><div class="shell footer-inner"><span>Gerds Rezepte · aus dem privaten Rezeptarchiv</span><span id="footerStats"></span></div></footer>
+  <script src="recipes-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

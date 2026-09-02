@@ -1,0 +1,17 @@
+{
+  "name": "Gerds Rezepte",
+  "short_name": "Gerds Rezepte",
+  "description": "Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fbf8f1",
+  "theme_color": "#29483a",
+  "icons": [
+    {
+      "src": "assets/images/logo-kitchen.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
