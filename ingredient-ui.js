@@ -52,11 +52,15 @@ function decorateTable(root,table,factor){
   [...root.querySelectorAll('li.ingredient')].forEach((row,index)=>{
     const ingredient=table.ingredients[index];if(!ingredient)return;
     const name=row.querySelector('.ingredient-name');
-    if(name&&ingredient.state){
+    if(name){
+      const stateText=ingredient.state?`, ${ingredient.state}`:'';
+      const basisText=ingredient.quantityBasis?.displaySuffix||'';
+      const text=`${stateText}${basisText}`;
       let suffix=name.querySelector('.ingredient-state-suffix');
-      if(!suffix){suffix=document.createElement('span');suffix.className='ingredient-state-suffix';name.append(suffix)}
-      const text=`, ${ingredient.state}`;
-      if(suffix.textContent!==text)suffix.textContent=text;
+      if(text){
+        if(!suffix){suffix=document.createElement('span');suffix.className='ingredient-state-suffix';name.append(suffix)}
+        if(suffix.textContent!==text)suffix.textContent=text;
+      }else if(suffix){suffix.remove()}
     }
     const unit=row.querySelector('.amount .unit');
     const forms=UNIT_FORMS[String(ingredient.unit||'').trim()];
