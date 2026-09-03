@@ -10,6 +10,7 @@ let swipe=null;
 
 function isShoppingPage(){return location.hash==='#einkaufsliste'||document.body.dataset.route==='shopping'}
 function isActive(){return document.body.classList.contains(MODE_CLASS)}
+function isDragging(){return document.body.classList.contains('shopping-drag-active')}
 
 function ensureLaunchButton(){
   if(!isShoppingPage()||!document.querySelector('.shopping-list'))return;
@@ -85,13 +86,14 @@ function finishSwipe(event){
 
 function sync(){
   queued=false;
+  if(isDragging())return;
   if(!isShoppingPage()){
     if(isActive())leaveMode();
     return;
   }
   ensureLaunchButton();
 }
-function queueSync(){if(queued)return;queued=true;requestAnimationFrame(sync)}
+function queueSync(){if(isDragging()||queued)return;queued=true;requestAnimationFrame(sync)}
 
 new MutationObserver(queueSync).observe(document.body,{childList:true,subtree:true});
 window.addEventListener('popstate',queueSync);
