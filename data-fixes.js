@@ -18,6 +18,9 @@ function uniqueTags(tags){
   for(const tag of tags){const key=norm(tag);if(!key||seen.has(key))continue;seen.add(key);out.push(tag)}
   return out;
 }
+
+// Nur reine Küchenzustände abtrennen. Einkaufsrelevante Merkmale wie
+// „trocken“, „frisch“, Fettgehalt, Sorte oder Qualität bleiben beim Produkt.
 const SIMPLE_PREPARATION_STATES=new Set([
   'zerlassen','geschmolzen','gekocht','gegart','blanchiert','geschalt','entkernt','entsteint',
   'abgetropft','aufgetaut','puriert','zerdruckt','passiert','gehobelt','netto'
@@ -31,26 +34,22 @@ function isPreparationState(value){
   return /^in .+ (?:wurfel|scheiben|ringe|streifen|stucke)$/.test(state);
 }
 function splitIngredientArticle(value){
-  const raw=String(value??'').trim();
-  const parts=raw.split(',').map(part=>part.trim()).filter(Boolean);
+  const label=String(value??'').trim();
+  const parts=label.split(',').map(part=>part.trim()).filter(Boolean);
   const states=[];
   while(parts.length>1&&isPreparationState(parts[parts.length-1]))states.unshift(parts.pop());
-  return {product:(parts.join(', ')||raw),state:states.join(', ')};
-}
-function isSingularQuantity(quantity){
-  if(quantity?.kind==='number')return Math.abs(Number(quantity.value)-1)<1e-9;
-  if(quantity?.kind==='range')return Math.abs(Number(quantity.min)-1)<1e-9&&Math.abs(Number(quantity.max)-1)<1e-9;
-  return null;
+  return {label,product:(parts.join(', ')||label),state:states.join(', ')};
 }
 function enrichIngredient(ingredient){
   if(!ingredient||typeof ingredient.article!=='string')return;
-  ingredient.article=canonicalEggArticle(ingredient.article);
-  const split=splitIngredientArticle(ingredient.article);
-  if(!String(ingredient.product??'').trim())ingredient.product=split.product;
-  if(!String(ingredient.state??'').trim()&&split.state)ingredient.state=split.state;
-  const unit=norm(ingredient.unit);
-  const singular=isSingularQuantity(ingredient.quantity);
-  if((unit==='scheib'||unit==='scheibe'||unit==='scheiben')&&singular!==null)ingredient.unit=singular?'Scheibe':'Scheiben';
+  const canonical=canonicalEggArticle(ingredient.article);
+  const split=splitIngredientArticle(canonical);
+  ingredient.label=String(ingredient.label??split.label).trim()||split.label;
+  ingredient.product=String(ingredient.product??split.product).trim()||split.product;
+  ingredient.state=String(ingredient.state??split.state).trim();
+  // article bleibt als Kompatibilitätsfeld bestehen, bezeichnet nun aber das kaufbare Produkt.
+  // Die Rezeptansicht rekonstruiert product + state über ingredient-ui.js.
+  ingredient.article=ingredient.product;
 }
 for(const recipe of DATA.recipes){
   const tables=[recipe,...(Array.isArray(recipe.subrecipes)?recipe.subrecipes:[])];
@@ -58,7 +57,7 @@ for(const recipe of DATA.recipes){
     if(!Array.isArray(table.ingredients))continue;
     table.ingredients.forEach(enrichIngredient);
   }
-  const hasEgg=tables.some(table=>Array.isArray(table.ingredients)&&table.ingredients.some(ingredient=>hasRealEggArticle(ingredient?.article)));
+  const hasEgg=tables.some(table=>Array.isArray(table.ingredients)&&table.ingredients.some(ingredient=>hasRealEggArticle(ingredient?.product||ingredient?.article)));
   const tags=(Array.isArray(recipe.tags)?recipe.tags:[]).map(canonicalEggArticle).filter(tag=>norm(tag)!=='ei'||hasEgg);
   recipe.tags=uniqueTags(tags);
 }
