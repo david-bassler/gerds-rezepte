@@ -55,12 +55,16 @@ function decorateTable(root,table,factor){
     if(name&&ingredient.state){
       let suffix=name.querySelector('.ingredient-state-suffix');
       if(!suffix){suffix=document.createElement('span');suffix.className='ingredient-state-suffix';name.append(suffix)}
-      suffix.textContent=`, ${ingredient.state}`;
+      const text=`, ${ingredient.state}`;
+      if(suffix.textContent!==text)suffix.textContent=text;
     }
     const unit=row.querySelector('.amount .unit');
     const forms=UNIT_FORMS[String(ingredient.unit||'').trim()];
     const singular=quantityIsSingular(ingredient.quantity,factor);
-    if(unit&&forms&&singular!==null)unit.textContent=singular?forms[0]:forms[1];
+    if(unit&&forms&&singular!==null){
+      const text=singular?forms[0]:forms[1];
+      if(unit.textContent!==text)unit.textContent=text;
+    }
   });
 }
 function decorateRecipe(){
@@ -79,22 +83,16 @@ function tokenIsSingular(token){
   const values=String(token).split('–').map(germanNumber);
   return values.length>0&&values.every(value=>Number.isFinite(value)&&Math.abs(value-1)<1e-9);
 }
+function inflectShoppingText(text){
+  return String(text||'').replace(/([0-9][0-9.,]*(?:–[0-9][0-9.,]*)?)\s+(Scheibe|Blatt|Zweig|Bund|Dose|Beet|Prise)\b/g,(all,quantity,unit)=>{
+    const forms=SHOPPING_FORMS[unit];
+    return `${quantity} ${tokenIsSingular(quantity)?forms[0]:forms[1]}`;
+  });
+}
 function decorateShoppingAmounts(){
   document.querySelectorAll('.shopping-amount').forEach(node=>{
-    [...node.childNodes].forEach(child=>{
-      if(child.nodeType!==Node.TEXT_NODE)return;
-      child.textContent=String(child.textContent||'').replace(/([0-9][0-9.,]*(?:–[0-9][0-9.,]*)?)\s+(Scheibe|Blatt|Zweig|Bund|Dose|Beet|Prise)\b/g,(all,quantity,unit)=>{
-        const forms=SHOPPING_FORMS[unit];
-        return `${quantity} ${tokenIsSingular(quantity)?forms[0]:forms[1]}`;
-      });
-    });
-    // Die Einkaufsmengen werden als reiner Text gerendert; dieser zweite Durchlauf
-    // deckt deshalb auch den Normalfall ohne weitere Kindknoten ab.
     const text=node.textContent;
-    const fixed=text.replace(/([0-9][0-9.,]*(?:–[0-9][0-9.,]*)?)\s+(Scheibe|Blatt|Zweig|Bund|Dose|Beet|Prise)\b/g,(all,quantity,unit)=>{
-      const forms=SHOPPING_FORMS[unit];
-      return `${quantity} ${tokenIsSingular(quantity)?forms[0]:forms[1]}`;
-    });
+    const fixed=inflectShoppingText(text);
     if(fixed!==text)node.textContent=fixed;
   });
 }
