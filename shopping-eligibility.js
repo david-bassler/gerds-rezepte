@@ -4,9 +4,46 @@ const DATA=window.GERDS_REZEPTE;
 if(!DATA||!Array.isArray(DATA.recipes))return;
 
 const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,' ').trim();
-function isRecipeReference(value){
-  return /(?:^| )(?:siehe|sie|aus(?: dem)?) (?:unterrezept|unterezept|hauptrezept)(?: |$)/.test(norm(value));
+function canonicalReferenceText(value){
+  return String(value??'').trim()
+    .replace(/\bUnterezept\b/gi,'Unterrezept')
+    .replace(/\bsie\s+(?=Unterrezept\b)/gi,'siehe ');
 }
+function referenceInfo(value){
+  const match=norm(value).match(/(?:^| )(?:siehe|aus(?: dem)?) (unterrezept|hauptrezept)(?: ([ivx]+))?(?: |$)/);
+  if(!match)return null;
+  const isMain=match[1]==='hauptrezept';
+  return {kind:isMain?'main':'subrecipe',index:isMain?null:(match[2]||'').toUpperCase()||null};
+}
+function isRecipeReference(value){return !!referenceInfo(value)}
+function normalizeReferenceIngredient(ingredient){
+  if(!ingredient)return;
+  for(const field of ['article','product','label']){
+    if(typeof ingredient[field]==='string')ingredient[field]=canonicalReferenceText(ingredient[field]);
+  }
+  const reference=referenceInfo(ingredient.label||ingredient.article||ingredient.product);
+  if(reference){ingredient.recipeReference=reference;ingredient.shoppingEligible=false}
+}
+function patchKnownMissingReference(recipe){
+  if(norm(recipe?.title)!=='kaiserschmarren kompott'||!Array.isArray(recipe.ingredients))return;
+  const ingredient=recipe.ingredients.find(item=>norm(item?.product||item?.article)==='apfel oder kirschkompott');
+  if(!ingredient||referenceInfo(ingredient.label||ingredient.article||ingredient.product))return;
+  const base=String(ingredient.product||ingredient.article||ingredient.label||'Apfel.- oder Kirschkompott').trim();
+  const label=`${base}, siehe Unterrezept I`;
+  ingredient.article=label;
+  ingredient.product=label;
+  ingredient.label=label;
+  ingredient.recipeReference={kind:'subrecipe',index:'I'};
+  ingredient.shoppingEligible=false;
+}
+for(const recipe of DATA.recipes){
+  patchKnownMissingReference(recipe);
+  const tables=[recipe,...(Array.isArray(recipe.subrecipes)?recipe.subrecipes:[])];
+  for(const table of tables){
+    if(Array.isArray(table.ingredients))table.ingredients.forEach(normalizeReferenceIngredient);
+  }
+}
+
 function recipeById(id){return DATA.recipes.find(recipe=>recipe.id===id)||null}
 function currentRecipe(){
   const match=(location.hash||'').match(/^#rezept=(.+)$/);
