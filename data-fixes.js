@@ -18,12 +18,18 @@ function uniqueTags(tags){
   for(const tag of tags){const key=norm(tag);if(!key||seen.has(key))continue;seen.add(key);out.push(tag)}
   return out;
 }
+function numberValue(value){
+  const n=Number(String(value??'').trim().replace(/\./g,'').replace(',','.'));
+  return Number.isFinite(n)?n:null;
+}
+function quantityFrom(value){return Number.isFinite(value)?{kind:'number',value}:null}
 
 // Nur reine Küchenzustände abtrennen. Einkaufsrelevante Merkmale wie
 // „trocken“, „frisch“, Fettgehalt, Sorte oder Qualität bleiben beim Produkt.
+// Netto/Brutto/Abtropfgewicht sind keine Zustände, sondern eine Mengenbasis.
 const SIMPLE_PREPARATION_STATES=new Set([
   'zerlassen','geschmolzen','gekocht','gegart','blanchiert','geschalt','entkernt','entsteint',
-  'abgetropft','aufgetaut','puriert','zerdruckt','passiert','gehobelt','netto'
+  'abgetropft','aufgetaut','puriert','zerdruckt','passiert','gehobelt'
 ]);
 function isPreparationState(value){
   const state=norm(value);
@@ -33,22 +39,88 @@ function isPreparationState(value){
   if(/^(?:frisch )?(?:(?:fein|grob) )?gerieben$/.test(state))return true;
   return /^in .+ (?:wurfel|scheiben|ringe|streifen|stucke)$/.test(state);
 }
-function splitIngredientArticle(value){
+
+function extractQuantityBasis(value,ingredient){
+  let text=String(value??'').trim();
+  let match;
+  const basis={recipe:'',purchase:'',purchaseKnown:true,approximate:false,displaySuffix:'',relation:null};
+
+  // Beispiel: „Grünkohl netto (= ca. 1000g brutto)“ bei 600 g Rezeptmenge.
+  match=text.match(/((?:,?\s*)netto\s*\(=\s*(ca\.?\s*)?([0-9.,]+)\s*(kg|g)\s*brutto\s*\))\s*$/i);
+  if(match){
+    const gross=numberValue(match[3]);
+    text=text.slice(0,match.index).trim().replace(/,\s*$/,'');
+    basis.recipe='net';basis.purchase='gross';basis.purchaseKnown=Number.isFinite(gross);
+    basis.approximate=!!match[2];basis.displaySuffix=match[1].startsWith(',')?match[1]:` ${match[1].trimStart()}`;
+    if(Number.isFinite(gross)){
+      ingredient.purchaseQuantity=quantityFrom(gross);
+      ingredient.purchaseUnit=match[4];
+      basis.relation={gross:{value:gross,unit:match[4]}};
+    }
+    return {text,basis};
+  }
+
+  // Beispiel: „Spargel, grün, brutto (= ca. 700g netto)“; die Rezeptmenge ist bereits die Kaufmenge.
+  match=text.match(/((?:,?\s*)brutto\s*\(=\s*(ca\.?\s*)?([0-9.,]+)\s*(kg|g)\s*netto\s*\))\s*$/i);
+  if(match){
+    const net=numberValue(match[3]);
+    text=text.slice(0,match.index).trim().replace(/,\s*$/,'');
+    basis.recipe='gross';basis.purchase='gross';basis.purchaseKnown=true;basis.approximate=false;
+    basis.displaySuffix=match[1].startsWith(',')?match[1]:` ${match[1].trimStart()}`;
+    if(Number.isFinite(net))basis.relation={net:{value:net,unit:match[4],approximate:!!match[2]}};
+    return {text,basis};
+  }
+
+  // Beispiel: „Spargel weiß/grün (Netto= 700g)“ bei 1000 g Rezeptmenge.
+  match=text.match(/(\s*\(\s*netto\s*=\s*([0-9.,]+)\s*(kg|g)\s*\))\s*$/i);
+  if(match){
+    const net=numberValue(match[2]);
+    text=text.slice(0,match.index).trim();
+    basis.recipe='gross';basis.purchase='gross';basis.purchaseKnown=true;basis.displaySuffix=match[1];
+    if(Number.isFinite(net))basis.relation={net:{value:net,unit:match[3]}};
+    return {text,basis};
+  }
+
+  // „netto ohne Fond“ entspricht praktisch einem Abtropfgewicht. Ohne explizite
+  // Packungsrelation darf daraus keine Bruttomenge erfunden werden.
+  match=text.match(/((?:,?\s*)netto\s+ohne\s+fond)\s*$/i);
+  if(match){
+    text=text.slice(0,match.index).trim().replace(/,\s*$/,'');
+    basis.recipe='drained';basis.purchase='drained';basis.purchaseKnown=false;
+    basis.displaySuffix=match[1].startsWith(',')?match[1]:` ${match[1].trimStart()}`;
+    return {text,basis};
+  }
+
+  // Reine Nettoangaben bleiben ausdrücklich Nettoangaben. Die Einkaufsliste darf
+  // dieselbe Zahl zeigen, markiert sie aber als Netto und als ggf. zu niedrig.
+  match=text.match(/((?:,?\s*)netto)\s*$/i);
+  if(match){
+    text=text.slice(0,match.index).trim().replace(/,\s*$/,'');
+    basis.recipe='net';basis.purchase='net';basis.purchaseKnown=false;
+    basis.displaySuffix=match[1].startsWith(',')?match[1]:` ${match[1].trimStart()}`;
+    return {text,basis};
+  }
+
+  return {text,basis:null};
+}
+function splitIngredientArticle(value,ingredient){
   const label=String(value??'').trim();
-  const parts=label.split(',').map(part=>part.trim()).filter(Boolean);
+  const extracted=extractQuantityBasis(label,ingredient);
+  const parts=extracted.text.split(',').map(part=>part.trim()).filter(Boolean);
   const states=[];
   while(parts.length>1&&isPreparationState(parts[parts.length-1]))states.unshift(parts.pop());
-  return {label,product:(parts.join(', ')||label),state:states.join(', ')};
+  return {label,product:(parts.join(', ')||extracted.text||label),state:states.join(', '),quantityBasis:extracted.basis};
 }
 function enrichIngredient(ingredient){
   if(!ingredient||typeof ingredient.article!=='string')return;
   const canonical=canonicalEggArticle(ingredient.article);
-  const split=splitIngredientArticle(canonical);
+  const split=splitIngredientArticle(canonical,ingredient);
   ingredient.label=String(ingredient.label??split.label).trim()||split.label;
   ingredient.product=String(ingredient.product??split.product).trim()||split.product;
   ingredient.state=String(ingredient.state??split.state).trim();
+  if(split.quantityBasis)ingredient.quantityBasis=split.quantityBasis;
   // article bleibt als Kompatibilitätsfeld bestehen, bezeichnet nun aber das kaufbare Produkt.
-  // Die Rezeptansicht rekonstruiert product + state über ingredient-ui.js.
+  // Die Rezeptansicht rekonstruiert product + state + Mengenbasis über ingredient-ui.js.
   ingredient.article=ingredient.product;
 }
 for(const recipe of DATA.recipes){
