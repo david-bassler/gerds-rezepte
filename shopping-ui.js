@@ -37,6 +37,7 @@ function sourceRecipeIds(item){
 }
 function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function isShoppingPage(){return location.hash==='#einkaufsliste'||document.body.dataset.route==='shopping'}
+function isDragging(){return document.body.classList.contains('shopping-drag-active')}
 function openRecipe(id){
   history.pushState({route:'detail',id,fromArchive:false},'',`#rezept=${encodeURIComponent(id)}`);
   location.reload();
@@ -66,13 +67,13 @@ function bindRecipeLinks(root=document){
 }
 async function refresh(){
   refreshQueued=false;
-  if(!isShoppingPage())return;
+  if(isDragging()||!isShoppingPage())return;
   const list=document.querySelector('.shopping-list');
   if(!list)return;
   const token=++refreshToken;
   let items;
   try{items=await getShopping()}catch(error){console.warn('Rezeptquellen der Einkaufsliste konnten nicht geladen werden.',error);return}
-  if(token!==refreshToken||!isShoppingPage())return;
+  if(token!==refreshToken||isDragging()||!isShoppingPage())return;
   const byKey=new Map(items.map(item=>[item.key,item]));
   ensurePrintButton();
   list.querySelectorAll('.shopping-row').forEach(row=>{
@@ -91,7 +92,7 @@ async function refresh(){
   });
 }
 function queueRefresh(){
-  if(refreshQueued)return;
+  if(isDragging()||refreshQueued)return;
   refreshQueued=true;
   requestAnimationFrame(refresh);
 }
