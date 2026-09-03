@@ -11,7 +11,7 @@ function canonicalEggArticle(value){
 }
 function hasRealEggArticle(value){
   const a=` ${norm(value)} `;
-  return / (?:ei|eier|eigelb|eiweiss|eiklar|vollei|huehnerei|huehnereier|eimasse|eiermasse) /.test(a);
+  return / (?:ei|eier|eigelb|eidotter|eiweiss|eiklar|vollei|huhnerei|huhnereier|huehnerei|huehnereier|eimasse|eiermasse|eipulver|eierstich) /.test(a);
 }
 function uniqueTags(tags){
   const seen=new Set(),out=[];
