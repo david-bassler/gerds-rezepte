@@ -2,9 +2,11 @@
 'use strict';
 
 const STORAGE_KEY='gerds-shopping-order-v1';
-const REFLOW_DURATION=180;
+const REFLOW_DURATION=160;
 let queued=false;
 let drag=null;
+let dragFrame=0;
+let pendingPointer=null;
 const rowAnimations=new WeakMap();
 
 function isShoppingPage(){return location.hash==='#einkaufsliste'||document.body.dataset.route==='shopping'}
@@ -62,13 +64,17 @@ function applyStoredOrder(list){
   if(saved.length!==order.length||saved.some((key,index)=>key!==order[index]))saveOrder(order);
 }
 
-function animateReflow(list,mutate){
-  const rows=rowsOf(list).filter(row=>row!==drag?.row);
-  const before=new Map(rows.map(row=>[row,row.getBoundingClientRect().top]));
-  rows.forEach(row=>rowAnimations.get(row)?.cancel());
+function animateRows(rows,mutate){
+  const moving=[...new Set(rows)].filter(Boolean);
+  if(!moving.length){mutate();return}
+  const before=new Map();
+  moving.forEach(row=>{
+    rowAnimations.get(row)?.cancel();
+    before.set(row,row.getBoundingClientRect().top);
+  });
   mutate();
   if(reducedMotion())return;
-  rows.forEach(row=>{
+  moving.forEach(row=>{
     const previousTop=before.get(row),nextTop=row.getBoundingClientRect().top;
     const delta=previousTop-nextTop;
     if(Math.abs(delta)<1)return;
@@ -94,22 +100,44 @@ function createGhost(row,event){
   ghost.style.top=`${rect.top}px`;
   ghost.style.width=`${rect.width}px`;
   ghost.style.height=`${rect.height}px`;
-  ghost.style.setProperty('--drag-x','0px');
-  ghost.style.setProperty('--drag-y','0px');
+  ghost.style.transform=reducedMotion()?'translate3d(0,0,0)':'translate3d(0,0,0) scale(1.015)';
   document.body.append(ghost);
   return {ghost,originX:event.clientX,originY:event.clientY};
 }
-function positionGhost(event){
+function positionGhost(clientX,clientY){
   if(!drag)return;
-  drag.ghost.style.setProperty('--drag-x',`${event.clientX-drag.originX}px`);
-  drag.ghost.style.setProperty('--drag-y',`${event.clientY-drag.originY}px`);
+  const dx=clientX-drag.originX,dy=clientY-drag.originY;
+  drag.ghost.style.transform=reducedMotion()?`translate3d(${dx}px,${dy}px,0)`:`translate3d(${dx}px,${dy}px,0) scale(1.015)`;
+}
+function affectedRows(target){
+  if(!drag)return [];
+  const rows=rowsOf(drag.list),from=rows.indexOf(drag.row),to=rows.indexOf(target);
+  if(from<0||to<0)return [target];
+  const start=Math.min(from,to),end=Math.max(from,to);
+  return rows.slice(start,end+1).filter(row=>row!==drag.row);
 }
 function movePlaceholder(target,after){
   if(!drag||target===drag.row||target.parentElement!==drag.list)return;
   const reference=after?target.nextElementSibling:target;
   if(reference===drag.row||drag.row.nextElementSibling===reference)return;
   if(reference===null&&!drag.row.nextElementSibling)return;
-  animateReflow(drag.list,()=>drag.list.insertBefore(drag.row,reference));
+  animateRows(affectedRows(target),()=>drag.list.insertBefore(drag.row,reference));
+}
+
+function processDragFrame(){
+  dragFrame=0;
+  if(!drag||!pendingPointer)return;
+  const point=pendingPointer;
+  pendingPointer=null;
+  positionGhost(point.clientX,point.clientY);
+  const target=document.elementFromPoint(point.clientX,point.clientY)?.closest('.shopping-row');
+  if(!target||target===drag.row||target.parentElement!==drag.list)return;
+  const rect=target.getBoundingClientRect();
+  movePlaceholder(target,point.clientY>rect.top+rect.height/2);
+}
+function scheduleDragFrame(event){
+  pendingPointer={clientX:event.clientX,clientY:event.clientY};
+  if(!dragFrame)dragFrame=requestAnimationFrame(processDragFrame);
 }
 
 function startDrag(event){
@@ -126,14 +154,12 @@ function startDrag(event){
 function moveDrag(event){
   if(!drag||event.pointerId!==drag.pointerId)return;
   event.preventDefault();
-  positionGhost(event);
-  const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('.shopping-row');
-  if(!target||target===drag.row||target.parentElement!==drag.list)return;
-  const rect=target.getBoundingClientRect();
-  movePlaceholder(target,event.clientY>rect.top+rect.height/2);
+  scheduleDragFrame(event);
 }
 function finishDrag(event){
   if(!drag||event.pointerId!==drag.pointerId)return;
+  if(dragFrame){cancelAnimationFrame(dragFrame);dragFrame=0}
+  pendingPointer=null;
   const {handle,row,list,ghost}=drag;
   persistDomOrder(list);
   drag=null;
@@ -148,7 +174,8 @@ function keyboardMove(event){
   const row=event.currentTarget.closest('.shopping-row'),list=row?.parentElement;
   if(!row||!list)return;
   event.preventDefault();
-  animateReflow(list,()=>{
+  const rows=rowsOf(list).filter(item=>item!==row);
+  animateRows(rows,()=>{
     if(event.key==='ArrowUp'){
       const previous=row.previousElementSibling;if(previous)list.insertBefore(row,previous);
     }else if(event.key==='ArrowDown'){
