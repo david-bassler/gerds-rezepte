@@ -11,6 +11,7 @@ let swipe=null;
 function isShoppingPage(){return location.hash==='#einkaufsliste'||document.body.dataset.route==='shopping'}
 function isActive(){return document.body.classList.contains(MODE_CLASS)}
 function isDragging(){return document.body.classList.contains('shopping-drag-active')}
+function usesTouchHint(){return window.matchMedia?.('(pointer: coarse)').matches||window.innerWidth<=680}
 
 function ensureLaunchButton(){
   if(!isShoppingPage()||!document.querySelector('.shopping-list'))return;
@@ -32,7 +33,9 @@ function showTip(){
   overlay.className='shopping-focus-overlay';
   overlay.setAttribute('role','status');
   overlay.setAttribute('aria-live','polite');
-  overlay.innerHTML='<div class="shopping-focus-tip"><span class="shopping-focus-arrow" aria-hidden="true">→</span><strong>Nach rechts wischen</strong><span>zurück zur normalen Ansicht</span></div>';
+  overlay.innerHTML=usesTouchHint()
+    ?'<div class="shopping-focus-tip"><span class="shopping-focus-arrow" aria-hidden="true">→</span><strong>Nach rechts wischen</strong><span>zurück zur normalen Ansicht</span></div>'
+    :'<div class="shopping-focus-tip"><strong>Esc drücken</strong><span>zurück zur normalen Ansicht</span></div>';
   document.body.append(overlay);
   requestAnimationFrame(()=>overlay.classList.add('is-visible'));
   tipTimer=setTimeout(()=>hideTip(),TIP_DURATION);
