@@ -5,12 +5,17 @@ const RecipeCard=window.GerdRecipeCard;
 if(!DATA||!RecipeCard)return;
 
 const DB_NAME='gerds-rezepte';
-const DB_VERSION=1;
+const DB_VERSION=2;
 const FAVORITES='favorites';
 const SHOPPING='shopping';
+const PLANS='recipePlans';
 let dbPromise=null;
 let favorites=new Set();
 let shopping=[];
+let plans=new Map();
+let plansReady=false;
+let persistTimer=null;
+let persistChain=Promise.resolve();
 
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,' ').trim();
@@ -24,6 +29,7 @@ function openDb(){
       const db=req.result;
       if(!db.objectStoreNames.contains(FAVORITES))db.createObjectStore(FAVORITES,{keyPath:'recipeId'});
       if(!db.objectStoreNames.contains(SHOPPING))db.createObjectStore(SHOPPING,{keyPath:'key'});
+      if(!db.objectStoreNames.contains(PLANS))db.createObjectStore(PLANS,{keyPath:'recipeId'});
     };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
@@ -96,6 +102,68 @@ function normalizeContributionAmount(purchase,article,amount){
 function contributionId(recipeId,tableKey,index){return `${recipeId}::${tableKey}::${index}`}
 function sourceCount(item){return new Set((item.contributions||[]).flatMap(c=>c.sourceIds?.length?c.sourceIds:[c.recipeId]).filter(Boolean)).size}
 
+function recipeById(id){return DATA.recipes.find(r=>r.id===id)}
+function defaultTarget(recipe){return recipe.scaleType==='factor'?1:recipe.baseScale}
+function clampTarget(recipe,value){
+  const min=recipe.scaleType==='batch'?0.1:recipe.scaleType==='factor'?0.25:1;
+  const max=recipe.scaleType==='factor'?20:100;
+  value=Number(value);
+  if(!Number.isFinite(value))value=defaultTarget(recipe);
+  return Math.min(max,Math.max(min,value));
+}
+function plannedTarget(recipe){const plan=plans.get(recipe.id);return plan&&Number.isFinite(plan.target)?clampTarget(recipe,plan.target):defaultTarget(recipe)}
+function planRecord(recipe,target){return {recipeId:recipe.id,target:clampTarget(recipe,target),scaleType:recipe.scaleType,updatedAt:Date.now()}}
+function tableFactor(table,target,main){if(main.scaleType==='factor')return target;if(main.scaleType==='portions'&&table.scaleType==='portions')return target/table.baseScale;return target/main.baseScale}
+function targetFromFactor(table,factor,main){if(main.scaleType==='factor')return factor;if(main.scaleType==='portions'&&table.scaleType==='portions')return factor*table.baseScale;return factor*main.baseScale}
+
+function sourceRefFromContribution(contribution){
+  const src=contribution?.sourceRef;
+  if(src?.recipeId&&src?.tableKey&&Number.isInteger(Number(src.ingredientIndex)))return {recipeId:src.recipeId,tableKey:src.tableKey,ingredientIndex:Number(src.ingredientIndex)};
+  const m=String(contribution?.id||'').match(/^(.*?)::(main|sub:\d+)::(\d+)$/);
+  return m?{recipeId:m[1],tableKey:m[2],ingredientIndex:Number(m[3])}:null;
+}
+function sourceFromRef(ref){
+  if(!ref)return null;
+  const recipe=recipeById(ref.recipeId);if(!recipe)return null;
+  const table=ref.tableKey==='main'?recipe:recipe.subrecipes[Number(String(ref.tableKey).split(':')[1])];
+  const ingredient=table?.ingredients?.[ref.ingredientIndex];
+  return table&&ingredient?{ref,recipe,table,ingredient}:null;
+}
+function materializeContribution(contribution){
+  const source=sourceFromRef(sourceRefFromContribution(contribution));
+  if(source){
+    const purchase=resolvePurchase(source.ingredient.article);
+    const factor=tableFactor(source.table,plannedTarget(source.recipe),source.recipe);
+    const amount=normalizeContributionAmount(purchase,source.ingredient.article,normalizedAmount(source.ingredient,factor));
+    const stored={
+      id:contribution.id||contributionId(source.recipe.id,source.ref.tableKey,source.ref.ingredientIndex),
+      recipeId:source.recipe.id,
+      sourceRef:source.ref,
+      article:source.ingredient.article,
+      component:purchase.component||'whole'
+    };
+    if(Array.isArray(contribution.sourceIds)&&contribution.sourceIds.length)stored.sourceIds=[...contribution.sourceIds];
+    return {purchase,stored,resolved:{...stored,amount}};
+  }
+  if(!contribution?.article)return null;
+  const purchase=resolvePurchase(contribution.article);
+  const amount=normalizeContributionAmount(purchase,contribution.article,contribution.amount||{dimension:'text',unit:'',min:null,max:null,text:'nach Bedarf'});
+  return {purchase,stored:{...contribution,component:contribution.component||purchase.component||'whole'},resolved:{...contribution,component:contribution.component||purchase.component||'whole',amount}};
+}
+function inferTargetFromSnapshot(contribution){
+  if(!contribution?.amount)return null;
+  const source=sourceFromRef(sourceRefFromContribution(contribution));if(!source)return null;
+  const purchase=resolvePurchase(source.ingredient.article);
+  const base=normalizeContributionAmount(purchase,source.ingredient.article,normalizedAmount(source.ingredient,1));
+  const old=normalizeContributionAmount(purchase,source.ingredient.article,contribution.amount);
+  if(base.dimension!==old.dimension||base.unit!==old.unit)return null;
+  let factor=null;
+  if(Number.isFinite(base.min)&&Math.abs(base.min)>.000001&&Number.isFinite(old.min))factor=old.min/base.min;
+  else if(Number.isFinite(base.max)&&Math.abs(base.max)>.000001&&Number.isFinite(old.max))factor=old.max/base.max;
+  if(!Number.isFinite(factor)||factor<=0)return null;
+  return clampTarget(source.recipe,targetFromFactor(source.table,factor,source.recipe));
+}
+
 function mergeRanges(list){
   let min=0,max=0,has=false;
   for(const x of list){if(Number.isFinite(x.min)&&Number.isFinite(x.max)){min+=x.min;max+=x.max;has=true}}
@@ -141,40 +209,58 @@ function eggAggregate(contributions){
   const unresolved=contributions.some(c=>!eggEquivalent(c));
   return {amounts:[{dimension:'count',unit:'Stück',min,max,text:''}],note:parts.length?`${parts.join(' + ')}${unresolved?' · weitere Angabe nach Bedarf':''}`:(unresolved?'nach Bedarf':'')};
 }
-function rebuildPurchaseItem(purchase,contributions,previous={}){
-  const aggregate=purchase.kind==='eggs'?eggAggregate(contributions):genericAggregate(contributions);
+function buildPurchaseItem(purchase,entries,previous={}){
+  const resolved=entries.map(entry=>entry.resolved);
+  const aggregate=purchase.kind==='eggs'?eggAggregate(resolved):genericAggregate(resolved);
   return {
     key:purchaseKey(purchase),purchaseId:purchase.id,article:purchase.article,kind:purchase.kind,
-    contributions,amounts:aggregate.amounts,note:aggregate.note,done:previous.done||false,
+    contributions:entries.map(entry=>entry.stored),amounts:aggregate.amounts,note:aggregate.note,done:previous.done||false,
     createdAt:previous.createdAt||Date.now(),updatedAt:Date.now()
   };
 }
+function rebuildShoppingFromContributions(contributions,previousItems=[]){
+  const previous=new Map(previousItems.map(item=>[item.key,item]));
+  const grouped=new Map();
+  for(const contribution of contributions){
+    const entry=materializeContribution(contribution);if(!entry)continue;
+    const key=purchaseKey(entry.purchase),bucket=grouped.get(key)||{purchase:entry.purchase,entries:[]};
+    bucket.entries.push(entry);grouped.set(key,bucket);
+  }
+  return [...grouped.entries()].map(([key,bucket])=>buildPurchaseItem(bucket.purchase,bucket.entries,previous.get(key)||{}));
+}
+function rebuildShoppingFromSources(items=shopping){return rebuildShoppingFromContributions(items.flatMap(item=>item.contributions||[]),items)}
+
 function contributionFromLegacy(item,index){
   const purchase=resolvePurchase(item.article);
   let amount={dimension:item.dimension||'text',unit:item.unit||'',min:item.min,max:item.max,text:item.text||''};
-  // Frühere Versionen hatten Eier fälschlich mit 50 g/Stück gespeichert.
   if(purchase.kind==='eggs'&&amount.dimension==='mass'&&amount.unit==='g'&&Number.isFinite(amount.min)&&Number.isFinite(amount.max)&&/(?:^| )(ei|eier)(?: |$)/.test(norm(item.article))){
     amount={dimension:'count',unit:'Stück',min:amount.min/50,max:amount.max/50,text:''};
   }
   return {id:`legacy:${item.key||index}`,recipeId:(item.sources||[])[0]||'',sourceIds:item.sources||[],legacyDone:!!item.done,article:item.article,component:purchase.component||'whole',amount:normalizeContributionAmount(purchase,item.article,amount)};
 }
 async function migrateShopping(items){
-  const all=[];
+  const contributions=[];
   let needsWrite=false;
   items.forEach((item,index)=>{
-    if(Array.isArray(item.contributions)&&item.purchaseId){item.contributions.forEach(c=>all.push(c));}
-    else{all.push(contributionFromLegacy(item,index));needsWrite=true;}
+    if(Array.isArray(item.contributions)&&item.purchaseId)item.contributions.forEach(c=>contributions.push(c));
+    else{contributions.push(contributionFromLegacy(item,index));needsWrite=true}
   });
-  const grouped=new Map();
-  for(const contribution of all){
-    const purchase=resolvePurchase(contribution.article);
-    contribution.component=contribution.component||purchase.component||'whole';
-    contribution.amount=normalizeContributionAmount(purchase,contribution.article,contribution.amount||{});
-    const key=purchaseKey(purchase),bucket=grouped.get(key)||{purchase,contributions:[],previous:items.find(x=>x.key===key)||{}};
-    bucket.contributions.push(contribution);grouped.set(key,bucket);
+
+  const seededPlans=[];
+  for(const contribution of contributions){
+    const ref=sourceRefFromContribution(contribution);
+    if(!ref||plans.has(ref.recipeId))continue;
+    const recipe=recipeById(ref.recipeId),target=inferTargetFromSnapshot(contribution);
+    if(recipe&&Number.isFinite(target)){
+      const record=planRecord(recipe,target);
+      plans.set(recipe.id,record);seededPlans.push(record);
+    }
   }
-  const out=[...grouped.values()].map(x=>rebuildPurchaseItem(x.purchase,x.contributions,{...x.previous,done:x.previous.done||x.contributions.some(c=>c.legacyDone)}));
-  if(needsWrite||items.some(x=>!x.purchaseId)||items.length!==out.length)await replaceAll(SHOPPING,out);
+  if(seededPlans.length)await Promise.all(seededPlans.map(record=>put(PLANS,record)));
+
+  const out=rebuildShoppingFromContributions(contributions,items);
+  const upgradedRefs=contributions.some(c=>sourceRefFromContribution(c)&&(!c.sourceRef||c.amount));
+  if(needsWrite||upgradedRefs||items.some(x=>!x.purchaseId)||items.length!==out.length)await replaceAll(SHOPPING,out);
   return out;
 }
 function formatAmountPart(item){
@@ -189,7 +275,32 @@ function formatAmountPart(item){
 }
 function displayAmount(item){return (item.amounts||[]).map(formatAmountPart).join(' + ')||'nach Bedarf'}
 
-function recipeById(id){return DATA.recipes.find(r=>r.id===id)}
+function persistStateSnapshot(){
+  const shoppingSnapshot=shopping.map(item=>({...item,contributions:(item.contributions||[]).map(c=>({...c,sourceRef:c.sourceRef?{...c.sourceRef}:undefined,amount:c.amount?{...c.amount}:undefined})),amounts:(item.amounts||[]).map(a=>({...a}))}));
+  const planSnapshot=[...plans.values()].map(p=>({...p}));
+  const task=persistChain.then(async()=>{
+    await Promise.all(planSnapshot.map(record=>put(PLANS,record)));
+    await replaceAll(SHOPPING,shoppingSnapshot);
+  });
+  persistChain=task.catch(()=>{});
+  return task;
+}
+function queueStatePersist(recipe,{immediate=false}={}){
+  if(recipe)plans.set(recipe.id,planRecord(recipe,plannedTarget(recipe)));
+  if(persistTimer){clearTimeout(persistTimer);persistTimer=null}
+  const write=()=>persistStateSnapshot().catch(error=>console.warn('Kochplan oder Einkaufsliste konnte nicht gespeichert werden.',error));
+  if(immediate)write();else persistTimer=setTimeout(write,140);
+}
+function updatePlanFromDetail(recipe,value,{immediate=false}={}){
+  const target=clampTarget(recipe,value),previous=plans.get(recipe.id)?.target;
+  if(Number.isFinite(previous)&&Math.abs(previous-target)<.000001){if(immediate)queueStatePersist(recipe,{immediate:true});return}
+  plans.set(recipe.id,planRecord(recipe,target));
+  shopping=rebuildShoppingFromSources(shopping);
+  syncShoppingControls();
+  if(currentListRoute()==='shopping')renderShopping();
+  queueStatePersist(recipe,{immediate});
+}
+
 function syncCardFavoriteButton(button,id){const saved=favorites.has(id),label=saved?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen';button.classList.toggle('is-saved',saved);button.textContent=saved?'★':'☆';button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(saved));button.title=label}
 function syncDetailFavoriteButton(button,id){const saved=favorites.has(id),label=saved?'Aus Favoriten entfernen':'Als Favorit speichern';button.classList.toggle('is-saved',saved);button.textContent=saved?'★ Gespeichert':'☆ Als Favorit speichern';button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(saved));button.title=label}
 function syncFavoriteControls(id){document.querySelectorAll('[data-favorite]').forEach(button=>{if(button.dataset.favorite===id)syncCardFavoriteButton(button,id)});document.querySelectorAll('[data-detail-favorite]').forEach(button=>{if(button.dataset.detailFavorite===id)syncDetailFavoriteButton(button,id)})}
@@ -203,8 +314,7 @@ async function toggleFavorite(id){
 }
 
 function currentRecipe(){const m=(location.hash||'').match(/^#rezept=(.+)$/);return m?recipeById(decodeURIComponent(m[1])):null}
-function currentTarget(r){const input=document.getElementById('portionInput');const v=Number(input?.value);return Number.isFinite(v)?v:(r.scaleType==='factor'?1:r.baseScale)}
-function tableFactor(table,target,main){if(main.scaleType==='factor')return target;if(main.scaleType==='portions'&&table.scaleType==='portions')return target/table.baseScale;return target/main.baseScale}
+function currentTarget(r){const input=document.getElementById('portionInput');const v=Number(input?.value);return Number.isFinite(v)?v:plannedTarget(r)}
 function hasShoppingContribution(id){return shopping.some(item=>(item.contributions||[]).some(c=>c.id===id))}
 function syncShoppingControls(){
   document.querySelectorAll('[data-shopping-contribution]').forEach(el=>{
@@ -215,38 +325,40 @@ function syncShoppingControls(){
   });
 }
 async function toggleShoppingIngredient(recipe,table,ingredient,target,id){
-  const before=shopping.map(item=>({...item,contributions:(item.contributions||[]).map(c=>({...c,amount:{...(c.amount||{})}})),amounts:(item.amounts||[]).map(a=>({...a}))}));
-  const existingItem=shopping.find(item=>(item.contributions||[]).some(c=>c.id===id));
-  let changedKey='';
-  if(existingItem){
-    const remaining=existingItem.contributions.filter(c=>c.id!==id);
-    changedKey=existingItem.key;
-    if(remaining.length){
-      const purchase=resolvePurchase(remaining[0].article);
-      const rebuilt=rebuildPurchaseItem(purchase,remaining,existingItem);
-      shopping=shopping.map(x=>x.key===existingItem.key?rebuilt:x);
-    }else shopping=shopping.filter(x=>x.key!==existingItem.key);
-  }else{
-    const factor=tableFactor(table,target,recipe);
+  const before=shopping;
+  const previousPlan=plans.get(recipe.id);
+  const ref=sourceRefFromContribution({id});
+  plans.set(recipe.id,planRecord(recipe,target));
+  const existing=shopping.flatMap(item=>item.contributions||[]).some(c=>c.id===id);
+  let contributions=shopping.flatMap(item=>item.contributions||[]).filter(c=>c.id!==id);
+  if(!existing){
     const purchase=resolvePurchase(ingredient.article);
-    const amount=normalizeContributionAmount(purchase,ingredient.article,normalizedAmount(ingredient,factor));
-    const contribution={id,recipeId:recipe.id,article:ingredient.article,component:purchase.component||'whole',amount};
-    const key=purchaseKey(purchase),existing=shopping.find(x=>x.key===key);
-    const rebuilt=rebuildPurchaseItem(purchase,[...(existing?.contributions||[]),contribution],existing||{});
-    changedKey=key;
-    shopping=existing?shopping.map(x=>x.key===key?rebuilt:x):[...shopping,rebuilt];
+    contributions.push(ref?{id,recipeId:recipe.id,sourceRef:ref,article:ingredient.article,component:purchase.component||'whole'}:{
+      id,recipeId:recipe.id,article:ingredient.article,component:purchase.component||'whole',
+      amount:normalizeContributionAmount(purchase,ingredient.article,normalizedAmount(ingredient,tableFactor(table,target,recipe)))
+    });
   }
+  shopping=rebuildShoppingFromContributions(contributions,shopping);
   updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();
   try{
-    const item=shopping.find(x=>x.key===changedKey);
-    if(item)await put(SHOPPING,item);else await del(SHOPPING,changedKey);
+    await persistStateSnapshot();
   }catch(error){
-    shopping=before;updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();
+    shopping=before;
+    if(previousPlan)plans.set(recipe.id,previousPlan);else plans.delete(recipe.id);
+    updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();
     console.warn('Einkaufsliste konnte nicht gespeichert werden.',error);
   }
 }
-async function removeShopping(key){shopping=shopping.filter(x=>x.key!==key);await del(SHOPPING,key);updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping()}
-async function toggleDone(key){const item=shopping.find(x=>x.key===key);if(!item)return;item.done=!item.done;await put(SHOPPING,item);renderShopping()}
+async function removeShopping(key){
+  const before=shopping;shopping=shopping.filter(x=>x.key!==key);
+  updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();
+  try{await persistStateSnapshot()}catch(error){shopping=before;updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();console.warn('Einkaufsartikel konnte nicht entfernt werden.',error)}
+}
+async function toggleDone(key){
+  const item=shopping.find(x=>x.key===key);if(!item)return;
+  item.done=!item.done;renderShopping();
+  try{await persistStateSnapshot()}catch(error){item.done=!item.done;renderShopping();console.warn('Einkaufsstatus konnte nicht gespeichert werden.',error)}
+}
 
 function ensureNav(){
   const nav=document.querySelector('.topbar .nav');if(!nav)return;
@@ -268,17 +380,37 @@ function renderFavorites(){
 }
 function renderShopping(){
   const app=document.getElementById('app'),rows=[...shopping].sort((a,b)=>Number(a.done)-Number(b.done)||a.article.localeCompare(b.article,'de'));
-  app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Einkaufsliste</h1><p>${rows.length?`${rows.length} Einkaufsartikel`:'Noch keine Zutaten hinzugefügt.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearShopping">Liste leeren</button></div>':''}</div><p class="shopping-note">Rezeptbezeichnungen werden auf echte Einkaufsartikel normalisiert. Direkt vergleichbare Einheiten werden addiert; unterschiedliche Einheiten bleiben innerhalb desselben Artikels sichtbar. Eigelb und Eiweiß werden als benötigte Eier zusammengeführt.</p>${rows.length?`<div class="shopping-list">${rows.map(x=>`<div class="shopping-row ${x.done?'is-done':''}"><input class="shopping-check" type="checkbox" ${x.done?'checked':''} data-shop-done="${esc(x.key)}" aria-label="Erledigt"><div class="shopping-name"><strong>${esc(x.article)}</strong><small>${sourceCount(x)} Rezept${sourceCount(x)===1?'':'e'}${x.note?` · ${esc(x.note)}`:''}</small></div><div class="shopping-amount">${esc(displayAmount(x))}</div><button class="shopping-remove" type="button" data-shop-remove="${esc(x.key)}" aria-label="Entfernen">×</button></div>`).join('')}</div>`:'<div class="shopping-empty">In einer Rezeptansicht einfach eine Zutat anklicken. Ein zweiter Klick entfernt genau diese Rezeptzutat wieder.</div>'}</div></div>`;
+  app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Einkaufsliste</h1><p>${rows.length?`${rows.length} Einkaufsartikel`:'Noch keine Zutaten hinzugefügt.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearShopping">Liste leeren</button></div>':''}</div>${rows.length?`<div class="shopping-list">${rows.map(x=>`<div class="shopping-row ${x.done?'is-done':''}"><input class="shopping-check" type="checkbox" ${x.done?'checked':''} data-shop-done="${esc(x.key)}" aria-label="Erledigt"><div class="shopping-name"><strong>${esc(x.article)}</strong><small>${sourceCount(x)} Rezept${sourceCount(x)===1?'':'e'}${x.note?` · ${esc(x.note)}`:''}</small></div><div class="shopping-amount">${esc(displayAmount(x))}</div><button class="shopping-remove" type="button" data-shop-remove="${esc(x.key)}" aria-label="Entfernen">×</button></div>`).join('')}</div>`:'<div class="shopping-empty">In einer Rezeptansicht einfach eine Zutat anklicken. Ein zweiter Klick entfernt genau diese Rezeptzutat wieder.</div>'}</div></div>`;
   app.querySelectorAll('[data-shop-done]').forEach(x=>x.addEventListener('change',()=>toggleDone(x.dataset.shopDone)));
   app.querySelectorAll('[data-shop-remove]').forEach(x=>x.addEventListener('click',()=>removeShopping(x.dataset.shopRemove)));
-  document.getElementById('clearShopping')?.addEventListener('click',async()=>{shopping=[];await clear(SHOPPING);updateCounts();syncShoppingControls();renderShopping()});
+  document.getElementById('clearShopping')?.addEventListener('click',async()=>{shopping=[];updateCounts();syncShoppingControls();renderShopping();try{await persistStateSnapshot()}catch(error){console.warn('Einkaufsliste konnte nicht geleert werden.',error)}});
 }
 
 function decorateCards(){document.querySelectorAll('.recipe-card').forEach(card=>{const open=card.querySelector('[data-recipe],[data-open-favorite]');if(!open)return;const id=open.dataset.recipe||open.dataset.openFavorite;let button=card.querySelector('.bookmark-btn');if(!button){card.insertAdjacentHTML('beforeend',`<button type="button" class="bookmark-btn" data-favorite="${esc(id)}"></button>`);button=card.querySelector('.bookmark-btn')}syncCardFavoriteButton(button,id);if(button.dataset.favoriteBound)return;button.dataset.favoriteBound='1';button.addEventListener('click',e=>{e.stopPropagation();toggleFavorite(id)})})}
+function bindRecipePlanControls(r){
+  if(!plansReady)return;
+  const input=document.getElementById('portionInput'),box=document.querySelector('.portion-box');
+  if(!input||!box)return;
+  if(!box.dataset.shoppingPlanBound){
+    box.dataset.shoppingPlanBound='1';
+    box.addEventListener('input',event=>{if(event.target===input)updatePlanFromDetail(r,input.value)});
+    box.addEventListener('change',event=>{if(event.target===input)updatePlanFromDetail(r,input.value,{immediate:true})});
+    box.addEventListener('click',event=>{if(event.target.closest('[data-step],#resetScale'))requestAnimationFrame(()=>updatePlanFromDetail(r,input.value,{immediate:true}))});
+  }
+  if(!input.dataset.shoppingPlanApplied){
+    input.dataset.shoppingPlanApplied='1';
+    const target=plannedTarget(r);
+    if(Math.abs(Number(input.value)-target)>.000001){
+      input.value=String(target);
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+  }
+}
 function decorateDetail(){
   const r=currentRecipe();if(!r)return;
   const hero=document.querySelector('.detail-hero > div');
   if(hero){let button=hero.querySelector('.detail-favorite');if(!button){hero.querySelector('.detail-meta')?.insertAdjacentHTML('afterend',`<button type="button" class="detail-favorite" data-detail-favorite="${esc(r.id)}"></button>`);button=hero.querySelector('.detail-favorite')}if(button){syncDetailFavoriteButton(button,r.id);if(!button.dataset.favoriteBound){button.dataset.favoriteBound='1';button.addEventListener('click',()=>toggleFavorite(r.id))}}}
+  bindRecipePlanControls(r);
   decorateIngredients(r);
 }
 function decorateIngredients(r){
@@ -307,8 +439,13 @@ const observer=new MutationObserver(()=>requestAnimationFrame(decorate));observe
 window.addEventListener('popstate',()=>setTimeout(()=>{const route=currentListRoute();if(route)showList(route,{write:false});else decorate()},0));
 
 (async()=>{
-  try{favorites=new Set((await getAll(FAVORITES)).map(x=>x.recipeId));shopping=await migrateShopping(await getAll(SHOPPING))}
-  catch(e){console.warn('Listen konnten nicht aus IndexedDB geladen werden.',e)}
+  try{
+    const [favoriteRows,planRows,shoppingRows]=await Promise.all([getAll(FAVORITES),getAll(PLANS),getAll(SHOPPING)]);
+    favorites=new Set(favoriteRows.map(x=>x.recipeId));
+    plans=new Map(planRows.filter(x=>x?.recipeId&&Number.isFinite(Number(x.target))).map(x=>[x.recipeId,{...x,target:Number(x.target)}]));
+    shopping=await migrateShopping(shoppingRows);
+  }catch(e){console.warn('Listen konnten nicht aus IndexedDB geladen werden.',e)}
+  plansReady=true;
   ensureNav();updateCounts();const route=currentListRoute();if(route)showList(route,{write:false});else decorate();
 })();
 })();
