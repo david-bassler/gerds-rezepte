@@ -2,12 +2,9 @@
 'use strict';
 
 const STORAGE_KEY='gerds-shopping-order-v1';
-const REFLOW_DURATION=160;
 let queued=false;
-let drag=null;
-let dragFrame=0;
-let pendingPointer=null;
-const rowAnimations=new WeakMap();
+let sortable=null;
+let activeList=null;
 
 function isShoppingPage(){return location.hash==='#einkaufsliste'||document.body.dataset.route==='shopping'}
 function reducedMotion(){return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches}
@@ -25,6 +22,21 @@ function currentKeys(list){return rowsOf(list).map(rowKey).filter(Boolean)}
 function persistDomOrder(list){saveOrder(currentKeys(list))}
 function dragIcon(){return '<svg viewBox="0 0 18 22" aria-hidden="true"><circle cx="5" cy="5" r="1.35"/><circle cx="13" cy="5" r="1.35"/><circle cx="5" cy="11" r="1.35"/><circle cx="13" cy="11" r="1.35"/><circle cx="5" cy="17" r="1.35"/><circle cx="13" cy="17" r="1.35"/></svg>'}
 
+function keyboardMove(event){
+  if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
+  const row=event.currentTarget.closest('.shopping-row'),list=row?.parentElement;
+  if(!row||!list)return;
+  event.preventDefault();
+  if(event.key==='ArrowUp'){
+    const previous=row.previousElementSibling;if(previous)list.insertBefore(row,previous);
+  }else if(event.key==='ArrowDown'){
+    const next=row.nextElementSibling;if(next)list.insertBefore(row,next.nextElementSibling);
+  }else if(event.key==='Home')list.prepend(row);
+  else if(event.key==='End')list.append(row);
+  persistDomOrder(list);
+  event.currentTarget.focus();
+}
+
 function ensureHandle(row){
   const key=rowKey(row);if(!key)return;
   row.dataset.shopKey=key;
@@ -39,14 +51,11 @@ function ensureHandle(row){
   }
   const name=row.querySelector('.shopping-name strong')?.textContent?.trim()||'Einkaufsartikel';
   handle.setAttribute('aria-label',`${name} verschieben`);
-  handle.title='Ziehen zum Verschieben · Pfeiltasten funktionieren ebenfalls';
-  if(handle.dataset.dragBound)return;
-  handle.dataset.dragBound='1';
-  handle.addEventListener('pointerdown',startDrag);
-  handle.addEventListener('pointermove',moveDrag);
-  handle.addEventListener('pointerup',finishDrag);
-  handle.addEventListener('pointercancel',finishDrag);
-  handle.addEventListener('keydown',keyboardMove);
+  handle.title=window.Sortable?'Ziehen zum Verschieben · Pfeiltasten funktionieren ebenfalls':'Mit Pfeiltasten verschieben';
+  if(!handle.dataset.keyboardBound){
+    handle.dataset.keyboardBound='1';
+    handle.addEventListener('keydown',keyboardMove);
+  }
 }
 
 function applyStoredOrder(list){
@@ -64,137 +73,54 @@ function applyStoredOrder(list){
   if(saved.length!==order.length||saved.some((key,index)=>key!==order[index]))saveOrder(order);
 }
 
-function animateRows(rows,mutate){
-  const moving=[...new Set(rows)].filter(Boolean);
-  if(!moving.length){mutate();return}
-  const before=new Map();
-  moving.forEach(row=>{
-    rowAnimations.get(row)?.cancel();
-    before.set(row,row.getBoundingClientRect().top);
-  });
-  mutate();
-  if(reducedMotion())return;
-  moving.forEach(row=>{
-    const previousTop=before.get(row),nextTop=row.getBoundingClientRect().top;
-    const delta=previousTop-nextTop;
-    if(Math.abs(delta)<1)return;
-    const animation=row.animate(
-      [{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],
-      {duration:REFLOW_DURATION,easing:'cubic-bezier(.2,.72,.25,1)'}
-    );
-    rowAnimations.set(row,animation);
-    const clear=()=>{if(rowAnimations.get(row)===animation)rowAnimations.delete(row)};
-    animation.onfinish=clear;
-    animation.oncancel=clear;
-  });
-}
-
-function createGhost(row,event){
-  const rect=row.getBoundingClientRect();
-  const ghost=row.cloneNode(true);
-  ghost.classList.add('shopping-drag-ghost');
-  ghost.removeAttribute('data-shop-key');
-  ghost.setAttribute('aria-hidden','true');
-  ghost.querySelectorAll('button,input,a,summary').forEach(el=>el.tabIndex=-1);
-  ghost.style.left=`${rect.left}px`;
-  ghost.style.top=`${rect.top}px`;
-  ghost.style.width=`${rect.width}px`;
-  ghost.style.height=`${rect.height}px`;
-  ghost.style.transform=reducedMotion()?'translate3d(0,0,0)':'translate3d(0,0,0) scale(1.015)';
-  document.body.append(ghost);
-  return {ghost,originX:event.clientX,originY:event.clientY};
-}
-function positionGhost(clientX,clientY){
-  if(!drag)return;
-  const dx=clientX-drag.originX,dy=clientY-drag.originY;
-  drag.ghost.style.transform=reducedMotion()?`translate3d(${dx}px,${dy}px,0)`:`translate3d(${dx}px,${dy}px,0) scale(1.015)`;
-}
-function affectedRows(target){
-  if(!drag)return [];
-  const rows=rowsOf(drag.list),from=rows.indexOf(drag.row),to=rows.indexOf(target);
-  if(from<0||to<0)return [target];
-  const start=Math.min(from,to),end=Math.max(from,to);
-  return rows.slice(start,end+1).filter(row=>row!==drag.row);
-}
-function movePlaceholder(target,after){
-  if(!drag||target===drag.row||target.parentElement!==drag.list)return;
-  const reference=after?target.nextElementSibling:target;
-  if(reference===drag.row||drag.row.nextElementSibling===reference)return;
-  if(reference===null&&!drag.row.nextElementSibling)return;
-  animateRows(affectedRows(target),()=>drag.list.insertBefore(drag.row,reference));
-}
-
-function processDragFrame(){
-  dragFrame=0;
-  if(!drag||!pendingPointer)return;
-  const point=pendingPointer;
-  pendingPointer=null;
-  positionGhost(point.clientX,point.clientY);
-  const target=document.elementFromPoint(point.clientX,point.clientY)?.closest('.shopping-row');
-  if(!target||target===drag.row||target.parentElement!==drag.list)return;
-  const rect=target.getBoundingClientRect();
-  movePlaceholder(target,point.clientY>rect.top+rect.height/2);
-}
-function scheduleDragFrame(event){
-  pendingPointer={clientX:event.clientX,clientY:event.clientY};
-  if(!dragFrame)dragFrame=requestAnimationFrame(processDragFrame);
-}
-
-function startDrag(event){
-  if(event.pointerType==='mouse'&&event.button!==0)return;
-  const handle=event.currentTarget,row=handle.closest('.shopping-row'),list=row?.parentElement;
-  if(!row||!list?.classList.contains('shopping-list'))return;
-  const floating=createGhost(row,event);
-  drag={pointerId:event.pointerId,handle,row,list,...floating};
-  row.classList.add('is-drag-placeholder');
-  document.body.classList.add('shopping-drag-active');
-  try{handle.setPointerCapture(event.pointerId)}catch{}
-  event.preventDefault();
-}
-function moveDrag(event){
-  if(!drag||event.pointerId!==drag.pointerId)return;
-  event.preventDefault();
-  scheduleDragFrame(event);
-}
-function finishDrag(event){
-  if(!drag||event.pointerId!==drag.pointerId)return;
-  if(dragFrame){cancelAnimationFrame(dragFrame);dragFrame=0}
-  pendingPointer=null;
-  const {handle,row,list,ghost}=drag;
-  persistDomOrder(list);
-  drag=null;
-  row.classList.remove('is-drag-placeholder');
-  ghost.remove();
+function destroySortable(){
+  if(sortable){try{sortable.destroy()}catch{}sortable=null}
+  activeList=null;
   document.body.classList.remove('shopping-drag-active');
-  try{handle.releasePointerCapture(event.pointerId)}catch{}
 }
-
-function keyboardMove(event){
-  if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
-  const row=event.currentTarget.closest('.shopping-row'),list=row?.parentElement;
-  if(!row||!list)return;
-  event.preventDefault();
-  const rows=rowsOf(list).filter(item=>item!==row);
-  animateRows(rows,()=>{
-    if(event.key==='ArrowUp'){
-      const previous=row.previousElementSibling;if(previous)list.insertBefore(row,previous);
-    }else if(event.key==='ArrowDown'){
-      const next=row.nextElementSibling;if(next)list.insertBefore(row,next.nextElementSibling);
-    }else if(event.key==='Home')list.prepend(row);
-    else if(event.key==='End')list.append(row);
+function initSortable(list){
+  if(activeList===list&&sortable)return;
+  destroySortable();
+  activeList=list;
+  if(!window.Sortable){
+    console.warn('Drag & Drop ist nicht verfügbar; die Einkaufsliste bleibt per Tastatur sortierbar.');
+    return;
+  }
+  sortable=window.Sortable.create(list,{
+    draggable:'.shopping-row',
+    handle:'.shopping-drag-handle',
+    animation:reducedMotion()?0:170,
+    easing:'cubic-bezier(.2,.72,.25,1)',
+    ghostClass:'shopping-sortable-ghost',
+    chosenClass:'shopping-sortable-chosen',
+    dragClass:'shopping-sortable-drag',
+    forceFallback:false,
+    fallbackOnBody:true,
+    fallbackTolerance:4,
+    swapThreshold:.62,
+    scroll:true,
+    scrollSensitivity:64,
+    scrollSpeed:12,
+    onStart(){document.body.classList.add('shopping-drag-active')},
+    onEnd(){
+      persistDomOrder(list);
+      document.body.classList.remove('shopping-drag-active');
+      queueSync();
+    }
   });
-  persistDomOrder(list);
-  event.currentTarget.focus();
 }
 
 function sync(){
   queued=false;
-  if(drag||!isShoppingPage())return;
+  if(document.body.classList.contains('shopping-drag-active'))return;
+  if(!isShoppingPage()){destroySortable();return}
   const list=document.querySelector('.shopping-list');
-  if(list)applyStoredOrder(list);
+  if(!list){destroySortable();return}
+  applyStoredOrder(list);
+  initSortable(list);
 }
 function queueSync(){
-  if(drag||queued)return;
+  if(document.body.classList.contains('shopping-drag-active')||queued)return;
   queued=true;
   requestAnimationFrame(sync);
 }
