@@ -65,12 +65,14 @@ function canonicalArticle(article){
 }
 function qtyRange(q,factor){if(!q)return null;if(q.kind==='number')return {min:q.value*factor,max:q.value*factor};if(q.kind==='range')return {min:q.min*factor,max:q.max*factor};return null}
 function normalizedAmount(ingredient,factor){
-  const range=qtyRange(ingredient.quantity,factor);
-  const unit=canonicalUnit(ingredient.unit);
-  if(!range)return {dimension:'text',unit:'',min:null,max:null,text:ingredient.quantity?.text||'nach Bedarf'};
+  const basis=ingredient.quantityBasis||{};
+  const range=qtyRange(ingredient.purchaseQuantity||ingredient.quantity,factor);
+  const unit=canonicalUnit(ingredient.purchaseUnit||ingredient.unit);
+  const meta={basis:basis.purchase||'',purchaseKnown:basis.purchaseKnown!==false,approximate:!!basis.approximate};
+  if(!range)return {dimension:'text',unit:'',min:null,max:null,text:ingredient.quantity?.text||'nach Bedarf',...meta};
   const m=UNIT_MAP[unit];
-  if(!m)return {dimension:`unit:${unit}`,unit:unit||'',min:range.min,max:range.max,text:''};
-  return {dimension:m.dimension,unit:m.unit,min:range.min*m.factor,max:range.max*m.factor,text:''};
+  if(!m)return {dimension:`unit:${unit}`,unit:unit||'',min:range.min,max:range.max,text:'',...meta};
+  return {dimension:m.dimension,unit:m.unit,min:range.min*m.factor,max:range.max*m.factor,text:'',...meta};
 }
 
 // Rezeptbezeichnung und Einkaufsartikel sind absichtlich getrennt.
@@ -171,17 +173,29 @@ function mergeRanges(list){
 }
 function genericAggregate(contributions){
   const groups=new Map(),texts=[];
+  let hasUnknownNet=false,hasUnknownDrained=false;
   for(const c of contributions){
     const a=c.amount||{};
+    if(a.purchaseKnown===false&&a.basis==='net')hasUnknownNet=true;
+    if(a.purchaseKnown===false&&a.basis==='drained')hasUnknownDrained=true;
     if(Number.isFinite(a.min)&&Number.isFinite(a.max)){
-      const id=`${a.dimension}::${a.unit}`;
-      const g=groups.get(id)||{dimension:a.dimension,unit:a.unit,min:0,max:0};
-      g.min+=a.min;g.max+=a.max;groups.set(id,g);
+      // Netto-/Abtropfgewichte dürfen nicht mit normalen Kaufmengen verrechnet werden.
+      const safeBasis=a.basis==='net'||a.basis==='drained'?a.basis:'purchase';
+      const id=`${a.dimension}::${a.unit}::${safeBasis}`;
+      const g=groups.get(id)||{dimension:a.dimension,unit:a.unit,min:0,max:0,basis:a.basis||'',purchaseKnown:a.purchaseKnown!==false,approximate:false,hasPlainBasis:false};
+      g.min+=a.min;g.max+=a.max;g.purchaseKnown=g.purchaseKnown&&a.purchaseKnown!==false;g.approximate=g.approximate||!!a.approximate;
+      if(!a.basis)g.hasPlainBasis=true;
+      if(g.hasPlainBasis&&g.basis==='gross')g.basis='';
+      else if(!g.basis&&a.basis==='gross'&&!g.hasPlainBasis)g.basis='gross';
+      groups.set(id,g);
     }else if(a.text&&!texts.includes(a.text))texts.push(a.text);
   }
   const amounts=[...groups.values()];
   if(texts.length)amounts.push({dimension:'text',unit:'',min:null,max:null,text:texts.join('; ')});
-  return {amounts,note:''};
+  const notes=[];
+  if(hasUnknownNet)notes.push('Nettoangabe – Einkaufsmenge ggf. höher');
+  if(hasUnknownDrained)notes.push('Abtropfgewicht – Packungsgewicht ggf. höher');
+  return {amounts,note:notes.join(' · ')};
 }
 function eggEquivalent(contribution){
   const a=contribution.amount||{},component=contribution.component||'whole';
@@ -269,7 +283,9 @@ function formatAmountPart(item){
     if(item.dimension==='mass'&&min>=1000&&max>=1000){min/=1000;max/=1000;unit='kg'}
     else if(item.dimension==='volume'&&min>=1000&&max>=1000){min/=1000;max/=1000;unit='L'}
     const q=Math.abs(max-min)<.0001?fmt(min):`${fmt(min)}–${fmt(max)}`;
-    return `${q}${unit?` ${unit}`:''}`;
+    const prefix=item.approximate?'ca. ':'';
+    const suffix=item.basis==='net'?' netto':item.basis==='drained'?' Abtropfgewicht':item.basis==='gross'?' brutto':'';
+    return `${prefix}${q}${unit?` ${unit}`:''}${suffix}`;
   }
   return item.text||'nach Bedarf';
 }
