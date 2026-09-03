@@ -42,8 +42,9 @@
   <footer><div class="shell footer-inner"><span>Gerds Rezepte · aus dem privaten Rezeptarchiv</span><span id="footerStats"></span></div></footer>
   <script>window.__gerdsInitialListHash=['#favoriten','#einkaufsliste'].includes(location.hash)?location.hash:'';</script>
   <script src="recipes-data.js"></script>
+  <script src="data-fixes.js"></script>
   <script src="app.js"></script>
   <script>if(window.__gerdsInitialListHash){const route=window.__gerdsInitialListHash==='#favoriten'?'favorites':'shopping';history.replaceState({route},'',window.__gerdsInitialListHash);}</script>
-  <script src="lists-loader.js"></script>
+  <script src="lists.js"></script>
 </body>
 </html>
