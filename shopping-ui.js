@@ -52,10 +52,17 @@ function ensurePrintButton(){
   button.addEventListener('click',()=>window.print());
   actions.prepend(button);
 }
-function sourceDetailsHtml(recipes){
+function sourceDetailsHtml(recipes,signature){
   const count=recipes.length;
   if(!count)return '';
-  return `<details class="shopping-sources"><summary>${count} Rezept${count===1?'':'e'} anzeigen</summary><div class="shopping-source-links">${recipes.map(r=>`<a href="#rezept=${encodeURIComponent(r.id)}" data-shopping-recipe="${esc(r.id)}">${esc(r.title)}</a>`).join('')}</div></details>`;
+  return `<details class="shopping-sources" data-source-signature="${esc(signature)}"><summary>${count} Rezept${count===1?'':'e'} anzeigen</summary><div class="shopping-source-links">${recipes.map(r=>`<a href="#rezept=${encodeURIComponent(r.id)}" data-shopping-recipe="${esc(r.id)}">${esc(r.title)}</a>`).join('')}</div></details>`;
+}
+function bindRecipeLinks(root=document){
+  root.querySelectorAll('[data-shopping-recipe]').forEach(link=>{
+    if(link.dataset.bound)return;
+    link.dataset.bound='1';
+    link.addEventListener('click',event=>{event.preventDefault();openRecipe(link.dataset.shoppingRecipe)});
+  });
 }
 async function refresh(){
   refreshQueued=false;
@@ -74,13 +81,13 @@ async function refresh(){
     if(!key||!name)return;
     const item=byKey.get(key);
     const recipes=sourceRecipeIds(item).map(recipeById).filter(Boolean).sort((a,b)=>a.title.localeCompare(b.title,'de'));
-    name.querySelector('.shopping-sources')?.remove();
-    if(recipes.length)name.insertAdjacentHTML('beforeend',sourceDetailsHtml(recipes));
-  });
-  document.querySelectorAll('[data-shopping-recipe]').forEach(link=>{
-    if(link.dataset.bound)return;
-    link.dataset.bound='1';
-    link.addEventListener('click',event=>{event.preventDefault();openRecipe(link.dataset.shoppingRecipe)});
+    const signature=recipes.map(r=>r.id).join('|');
+    const existing=name.querySelector('.shopping-sources');
+    if(!recipes.length){existing?.remove();return}
+    if(existing?.dataset.sourceSignature===signature){bindRecipeLinks(existing);return}
+    existing?.remove();
+    name.insertAdjacentHTML('beforeend',sourceDetailsHtml(recipes,signature));
+    bindRecipeLinks(name);
   });
 }
 function queueRefresh(){
