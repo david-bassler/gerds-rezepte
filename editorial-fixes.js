@@ -4,18 +4,51 @@ const DATA=window.GERDS_REZEPTE;
 if(!DATA||!Array.isArray(DATA.recipes))return;
 
 const DECIMAL_MARK='\uE000';
+const UNIT_CANONICAL={
+  'st':'Stk.','st.':'Stk.','stk':'Stk.','stk.':'Stk.','stück':'Stk.',
+  'gr':'g','g':'g','kg':'kg','ml':'ml','cl':'cl','l':'L',
+  'bd':'Bund','bund':'Bund','zwg':'Zweig','zweig':'Zweig',
+  'tl':'TL','el':'EL','msp':'Msp.','msp.':'Msp.',
+  'spritz':'Spritzer','spritzer':'Spritzer','scheib.':'Scheibe','scheibe':'Scheibe'
+};
+function canonicalUnit(value){
+  const raw=String(value??'').trim();
+  return UNIT_CANONICAL[raw.toLocaleLowerCase('de-DE')]||raw;
+}
 function cleanKnownSpelling(value){
   return String(value??'')
     .replace(/\bAbtropfgeweicht\b/gi,'Abtropfgewicht')
     .replace(/\bHokaido/g,'Hokkaido')
-    .replace(/\bTzaziki\b/g,'Tzatziki');
+    .replace(/\bTzaziki\b/gi,'Tzatziki')
+    .replace(/\bCreme\s+fraiche\b/gi,'Crème fraîche')
+    .replace(/\bBroccoli/gi,'Brokkoli')
+    .replace(/\bCousCous\b/g,'Couscous')
+    .replace(/\bDipp\b/gi,'Dip')
+    .replace(/\bDijon\s*-\s*Senf\b|\bDijonsenf\b/gi,'Dijon-Senf')
+    .replace(/\bMu\s*-?\s*Err\s*-?\s*Pilze\b/gi,'Mu-Err-Pilze')
+    .replace(/\bDs\.?\s*-\s*Tomaten\b/gi,'Dosentomaten')
+    .replace(/\bDs\.?\s*-\s*Kichererbsen\b/gi,'Dosenkichererbsen')
+    .replace(/\bDs\.?\s*-\s*Thunfisch\b/gi,'Dosenthunfisch');
+}
+function cleanCompoundSpacing(value){
+  return String(value??'')
+    // Fehlerhafte Punkte vor einem ausgelassenen Kompositum: „Raps.- oder“ -> „Raps- oder“.
+    .replace(/([A-Za-zÄÖÜäöüß])\.\s*-\s*(?=(?:oder|und)\b)/gi,'$1- ')
+    // Echte Zusammensetzungen schließen: „Curry- Joghurtsoße“ -> „Curry-Joghurtsoße“.
+    // Auslassungsformen wie „Rot- oder Weißwein“ bleiben unverändert.
+    .replace(/([A-Za-zÄÖÜäöüß])-\s+(?!(?:oder|und|bzw\.)\b)/gi,'$1-');
+}
+function addDescriptorComma(value){
+  return String(value??'').replace(/^(.+?)\s+(frisch|trocken|unbehandelt|mittelalt|nativ|Fertigprodukt)$/i,(all,base,descriptor)=>{
+    if(/(?:oder|und|alternativ)\s*$/i.test(base)||/,\s*$/.test(base))return all;
+    return `${base}, ${descriptor}`;
+  });
 }
 function cleanIngredientText(value){
-  let text=cleanKnownSpelling(value).trim();
+  let text=cleanCompoundSpacing(cleanKnownSpelling(value)).trim();
   if(!text)return text;
 
-  // Dezimalkomma zuerst schützen, damit das redaktionelle Komma-Spacing
-  // aus „3,5 %“ niemals wieder „3, 5 %“ machen kann.
+  // Dezimalkomma zuerst schützen, damit „3,5 %“ nie als redaktionelles Komma behandelt wird.
   text=text.replace(/(\d)\s*,\s*(\d)/g,(_,left,right)=>`${left}${DECIMAL_MARK}${right}`);
   text=text.replace(/\s*,\s*/g,', ');
   text=text.replaceAll(DECIMAL_MARK,',');
@@ -29,10 +62,11 @@ function cleanIngredientText(value){
   text=text.replace(/\b(EL|TL|Scheibe|Ei|Blatt|Stk\.?)\s*=\s*(?=\d)/gi,'$1 = ');
   text=text.replace(/\bNetto\s*=\s*(?=\d)/gi,'Netto = ');
   text=text.replace(/[ \t]{2,}/g,' ');
+  text=addDescriptorComma(text);
   return text.trim();
 }
 function cleanTitleText(value){
-  return cleanKnownSpelling(value)
+  return cleanCompoundSpacing(cleanKnownSpelling(value))
     .replace(/\bArt\s+Art\b/g,'Art')
     .replace(/[ \t]{2,}/g,' ')
     .trim();
@@ -42,6 +76,8 @@ function cleanIngredient(ingredient){
   for(const field of ['article','product','label','state']){
     if(typeof ingredient[field]==='string')ingredient[field]=cleanIngredientText(ingredient[field]);
   }
+  if(typeof ingredient.unit==='string')ingredient.unit=canonicalUnit(ingredient.unit);
+  if(typeof ingredient.purchaseUnit==='string')ingredient.purchaseUnit=canonicalUnit(ingredient.purchaseUnit);
   if(typeof ingredient.quantityBasis?.displaySuffix==='string'){
     ingredient.quantityBasis.displaySuffix=cleanIngredientText(ingredient.quantityBasis.displaySuffix);
   }
@@ -68,7 +104,7 @@ for(const recipe of DATA.recipes){
     if(table!==recipe&&typeof table?.title==='string')table.title=cleanTitleText(table.title);
     if(Array.isArray(table?.ingredients))table.ingredients.forEach(cleanIngredient);
     for(const field of ['notes','preparation','cooking']){
-      if(Array.isArray(table?.[field]))table[field]=table[field].map(text=>cleanKnownSpelling(text).replace(/[ \t]{2,}/g,' ').trim());
+      if(Array.isArray(table?.[field]))table[field]=table[field].map(text=>cleanCompoundSpacing(cleanKnownSpelling(text)).replace(/[ \t]{2,}/g,' ').trim());
     }
   }
 }
