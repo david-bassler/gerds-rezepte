@@ -65,13 +65,13 @@ function applyStoredOrder(list){
 function animateReflow(list,mutate){
   const rows=rowsOf(list).filter(row=>row!==drag?.row);
   const before=new Map(rows.map(row=>[row,row.getBoundingClientRect().top]));
+  rows.forEach(row=>rowAnimations.get(row)?.cancel());
   mutate();
   if(reducedMotion())return;
   rows.forEach(row=>{
     const previousTop=before.get(row),nextTop=row.getBoundingClientRect().top;
     const delta=previousTop-nextTop;
     if(Math.abs(delta)<1)return;
-    rowAnimations.get(row)?.cancel();
     const animation=row.animate(
       [{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],
       {duration:REFLOW_DURATION,easing:'cubic-bezier(.2,.72,.25,1)'}
