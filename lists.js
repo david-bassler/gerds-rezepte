@@ -1,7 +1,8 @@
 (()=>{
 'use strict';
 const DATA=window.GERDS_REZEPTE;
-if(!DATA)return;
+const RecipeCard=window.GerdRecipeCard;
+if(!DATA||!RecipeCard)return;
 
 const DB_NAME='gerds-rezepte';
 const DB_VERSION=1;
@@ -257,14 +258,11 @@ function updateCounts(){document.querySelectorAll('[data-fav-count]').forEach(x=
 function currentListRoute(){return history.state?.route==='favorites'||location.hash==='#favoriten'?'favorites':history.state?.route==='shopping'||location.hash==='#einkaufsliste'?'shopping':''}
 function showList(route,{write=true}={}){if(write)history.pushState({route},'',route==='favorites'?'#favoriten':'#einkaufsliste');document.body.dataset.route=route;document.body.classList.remove('has-hero');document.querySelector('.topbar')?.classList.add('is-stuck','show-brand');document.querySelectorAll('[data-route]').forEach(x=>x.classList.remove('active'));document.querySelectorAll('[data-list-route]').forEach(x=>x.classList.toggle('active',x.dataset.listRoute===route));route==='favorites'?renderFavorites():renderShopping();scrollTo({top:0,behavior:'smooth'})}
 
-function favoriteCard(r){
-  const visual=r.images?.length?`<div class="card-visual has-image" style="--card-image:url('${encodeURI(r.images[0])}');--card-size-y:130%;--card-pos-y:54%;"></div>`:`<div class="card-visual no-image"><span class="card-initials">${esc(r.title.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase())}</span></div>`;
-  return `<article class="recipe-card"><button class="list-card-button" type="button" data-open-favorite="${esc(r.id)}">${visual}<div class="card-body"><div class="card-taxonomy"><span class="category">${esc(r.category)}</span><span class="cuisine-badge">${esc(r.cuisine)}</span></div><h3>${esc(r.title)}</h3><div class="meta-row"><span>◷ ca. ${r.durationMinutes} Min.</span><span>·</span><span>${esc(r.scaleType==='portions'?`${fmt(r.baseScale)} Portionen`:r.scaleType==='batch'?`${fmt(r.baseScale)} kg Ansatz`:'1 × Rezept')}</span></div></div></button><button type="button" class="bookmark-btn is-saved" data-favorite="${esc(r.id)}" aria-label="Aus Favoriten entfernen" aria-pressed="true" title="Aus Favoriten entfernen">★</button></article>`;
-}
+function favoriteCard(r){return RecipeCard.render(r)}
 function renderFavorites(){
   const app=document.getElementById('app'),rows=DATA.recipes.filter(r=>favorites.has(r.id)).sort((a,b)=>a.title.localeCompare(b.title,'de'));
   app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Favoriten</h1><p>${rows.length?`${rows.length} gespeicherte${rows.length===1?'s Rezept':' Rezepte'}`:'Noch keine Rezepte gespeichert.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearFavorites">Alle entfernen</button></div>':''}</div>${rows.length?`<div class="favorite-grid">${rows.map(favoriteCard).join('')}</div>`:'<div class="favorite-empty">Mit dem Lesezeichen-Symbol auf einer Rezeptkarte oder in der Detailansicht kannst du Rezepte hier ablegen.</div>'}</div></div>`;
-  app.querySelectorAll('[data-open-favorite]').forEach(b=>b.addEventListener('click',()=>{history.pushState({route:'detail',id:b.dataset.openFavorite,fromArchive:false},'',`#rezept=${encodeURIComponent(b.dataset.openFavorite)}`);location.reload()}));
+  app.querySelectorAll('[data-recipe]').forEach(b=>b.addEventListener('click',()=>{history.pushState({route:'detail',id:b.dataset.recipe,fromArchive:false},'',`#rezept=${encodeURIComponent(b.dataset.recipe)}`);location.reload()}));
   app.querySelectorAll('[data-favorite]').forEach(b=>{syncCardFavoriteButton(b,b.dataset.favorite);b.addEventListener('click',e=>{e.stopPropagation();toggleFavorite(b.dataset.favorite)})});
   document.getElementById('clearFavorites')?.addEventListener('click',async()=>{favorites.clear();await clear(FAVORITES);updateCounts();renderFavorites()});
 }
