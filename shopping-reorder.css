@@ -1,0 +1,17 @@
+.shopping-row{grid-template-columns:auto auto minmax(0,1fr) auto auto}
+.shopping-drag-handle{width:30px;height:34px;padding:0;border:0;background:transparent;color:#6b786f;display:grid;place-items:center;cursor:grab;border-radius:8px;touch-action:none;user-select:none;-webkit-user-select:none}
+.shopping-drag-handle:hover{color:#29483a;background:rgba(41,72,58,.06)}
+.shopping-drag-handle:focus-visible{outline:2px solid #29483a;outline-offset:1px}
+.shopping-drag-handle svg{width:16px;height:20px;display:block;fill:currentColor;pointer-events:none}
+.shopping-row.is-dragging{position:relative;z-index:5;opacity:.78;box-shadow:0 14px 30px rgba(34,43,34,.14);border-color:rgba(41,72,58,.28)}
+.shopping-row.is-dragging .shopping-drag-handle{cursor:grabbing;color:#29483a}
+body.shopping-drag-active{cursor:grabbing;user-select:none;-webkit-user-select:none}
+@media(max-width:680px){
+  .shopping-row{grid-template-columns:auto auto minmax(0,1fr) auto}
+  .shopping-drag-handle{grid-column:1;grid-row:1 / span 2;align-self:center;width:28px}
+  .shopping-check{grid-column:2;grid-row:1}
+  .shopping-name{grid-column:3;grid-row:1}
+  .shopping-amount{grid-column:3;grid-row:2;text-align:left}
+  .shopping-remove{grid-column:4;grid-row:1 / span 2;align-self:center}
+}
+@media print{body[data-route="shopping"] .shopping-drag-handle{display:none!important}}
