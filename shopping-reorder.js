@@ -53,7 +53,7 @@ function applyStoredOrder(list){
     const row=byKey.get(key),at=list.children[index];
     if(row&&at!==row)list.insertBefore(row,at||null);
   });
-  if(order.join('\u0000')!==saved.filter(key=>byKey.has(key)).concat(current.filter(key=>!saved.includes(key))).join('\u0000')||saved.length!==order.length)saveOrder(order);
+  if(saved.length!==order.length||saved.some((key,index)=>key!==order[index]))saveOrder(order);
 }
 function startDrag(event){
   if(event.pointerType==='mouse'&&event.button!==0)return;
@@ -78,11 +78,11 @@ function moveDrag(event){
 function finishDrag(event){
   if(!drag||event.pointerId!==drag.pointerId)return;
   const {handle,row,list}=drag;
+  persistDomOrder(list);
   drag=null;
   row.classList.remove('is-dragging');
   document.body.classList.remove('shopping-drag-active');
   try{handle.releasePointerCapture(event.pointerId)}catch{}
-  persistDomOrder(list);
 }
 function keyboardMove(event){
   if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
@@ -100,11 +100,15 @@ function keyboardMove(event){
 }
 function sync(){
   queued=false;
-  if(!isShoppingPage())return;
+  if(drag||!isShoppingPage())return;
   const list=document.querySelector('.shopping-list');
   if(list)applyStoredOrder(list);
 }
-function queueSync(){if(queued)return;queued=true;requestAnimationFrame(sync)}
+function queueSync(){
+  if(drag||queued)return;
+  queued=true;
+  requestAnimationFrame(sync);
+}
 
 new MutationObserver(queueSync).observe(document.body,{childList:true,subtree:true});
 window.addEventListener('popstate',queueSync);
