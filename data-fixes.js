@@ -23,6 +23,13 @@ function numberValue(value){
   return Number.isFinite(n)?n:null;
 }
 function quantityFrom(value){return Number.isFinite(value)?{kind:'number',value}:null}
+function recipeReference(value){
+  const a=norm(value);
+  const match=a.match(/(?:^| )(?:siehe|sie|aus(?: dem)?) (unterrezept|unterezept|hauptrezept)(?: ([ivx]+))?(?: |$)/);
+  if(!match)return null;
+  const isMain=match[1]==='hauptrezept';
+  return {kind:isMain?'main':'subrecipe',index:isMain?null:(match[2]||'').toUpperCase()||null};
+}
 
 // Nur reine Küchenzustände abtrennen. Einkaufsrelevante Merkmale wie
 // „trocken“, „frisch“, Fettgehalt, Sorte oder Qualität bleiben beim Produkt.
@@ -114,11 +121,14 @@ function splitIngredientArticle(value,ingredient){
 function enrichIngredient(ingredient){
   if(!ingredient||typeof ingredient.article!=='string')return;
   const canonical=canonicalEggArticle(ingredient.article);
+  const reference=recipeReference(canonical);
   const split=splitIngredientArticle(canonical,ingredient);
   ingredient.label=String(ingredient.label??split.label).trim()||split.label;
   ingredient.product=String(ingredient.product??split.product).trim()||split.product;
   ingredient.state=String(ingredient.state??split.state).trim();
   if(split.quantityBasis)ingredient.quantityBasis=split.quantityBasis;
+  if(reference){ingredient.recipeReference=reference;ingredient.shoppingEligible=false}
+  else if(ingredient.shoppingEligible==null)ingredient.shoppingEligible=true;
   // article bleibt als Kompatibilitätsfeld bestehen, bezeichnet nun aber das kaufbare Produkt.
   // Die Rezeptansicht rekonstruiert product + state + Mengenbasis über ingredient-ui.js.
   ingredient.article=ingredient.product;
