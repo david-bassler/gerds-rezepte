@@ -45,20 +45,23 @@ function itemFromToken(token){return String(token||'').startsWith(ITEM_PREFIX)?S
 function dragIcon(){return '<svg viewBox="0 0 18 22" aria-hidden="true"><circle cx="5" cy="5" r="1.35"/><circle cx="13" cy="5" r="1.35"/><circle cx="5" cy="11" r="1.35"/><circle cx="13" cy="11" r="1.35"/><circle cx="5" cy="17" r="1.35"/><circle cx="13" cy="17" r="1.35"/></svg>'}
 
 function categoryForArticle(value){
-  const a=` ${norm(value)} `;
-  if(/\b(?:tk|tiefkuhl|tiefgefroren|gefroren)\b/.test(a))return 'frozen';
-  if(/\b(?:rind|kalb|schwein|lamm|hammel|huhn|huhner|hahn|pute|truthahn|ente|gans|wild|reh|hirsch|kaninchen|hackfleisch|mett|speck|bacon|schinken|salami|wurst|bratwurst|leber|kasseler|filetsteak|schnitzel|kotelett|roulade)\w*/.test(a))return 'meat';
-  if(/\b(?:fisch|lachs|forelle|kabeljau|dorsch|seelachs|heilbutt|zander|barsch|hering|makrele|sardine|thunfisch|seezunge|aal|garnele|shrimp|scampi|krebs|krabbe|hummer|languste|muschel|vongole|tintenfisch|calamari|oktopus)\w*/.test(a))return 'fish';
-  if(/\b(?:apfel|birne|banane|zitrone|limette|orange|mandarine|clementine|grapefruit|beere|erdbeer|himbeer|brombeer|johannisbeer|heidelbeer|kirsche|pfirsich|aprikose|pflaume|zwetschge|traube|melone|ananas|mango|kiwi|avocado|feige|granatapfel|kartoffel|zwiebel|knoblauch|schalotte|lauch|porree|mohre|karotte|sellerie|paprika|tomate|gurke|zucchini|aubergine|kohl|blumenkohl|brokkoli|spargel|bohne|erbse|spinat|mangold|salat|rucola|radicchio|fenchel|kurbis|rettich|radies|rote bete|chicoree|artischocke|chili|peperoni|champignon|pilz|steinpilz|pfifferling|petersilie|schnittlauch|basilikum|dill|koriander|minze|thymian|rosmarin|salbei|estragon|kerbel|majoran|kresse)\w*/.test(a))return 'produce';
-  if(/\b(?:brot|toast|brotchen|baguette|ciabatta|croissant|brezel|fladenbrot|pumpernickel)\w*/.test(a))return 'bakery';
-  if(/\b(?:milch|butter|sahne|schmand|saure sahne|creme fraiche|creme double|quark|joghurt|yoghurt|kefir|buttermilch|ei|eier|eigelb|eiweiss|kase|parmesan|pecorino|mozzarella|feta|gouda|emmentaler|gruyere|cheddar|camembert|brie|ricotta|mascarpone|frischkase|gorgonzola|roquefort)\w*/.test(a))return 'dairy';
-  if(/\b(?:tofu|gnocchi|frische pasta|frischer blatterteig|frischer pizzateig|fertigteig|hefeteig|murbeteig)\b/.test(a))return 'chilled';
-  if(/\b(?:dose|dosentomate|tomatenmark|kapern|olive|cornichon|gewurzgurke|eingelegt|konserve|glas|artischockenherz|sardelle)\w*/.test(a))return 'canned';
-  if(/\b(?:mehl|zucker|puderzucker|vanillezucker|backpulver|natron|starke|speisestarke|kakao|schokolade|kuverture|gelatine|hefe|mandel|haselnuss|walnuss|pekannuss|pistazie|kokos|rosine|korinthe|marzipan|nougat|honig|sirup)\w*/.test(a))return 'baking';
-  if(/\b(?:salz|pfeffer|paprikapulver|curry|kurkuma|muskat|zimt|nelke|kardamom|kummel|kreuzkummel|koriandersaat|senfkorn|lorbeer|wacholder|safran|gewurz|chilipulver|cayenne|vanille|bruhwurfel|bruhe|fond)\w*/.test(a))return 'spices';
-  if(/\b(?:ol|oel|essig|senf|ketchup|mayonnaise|mayo|sojasauce|sojasosse|worcester|tabasco|sambal|chilisauce|fischsauce|austernsauce|pesto|sauce|sosse|dressing)\w*/.test(a))return 'sauces';
-  if(/\b(?:wein|bier|sekt|champagner|prosecco|sherry|portwein|cognac|brandy|rum|wodka|whisky|likor|saft|wasser|mineralwasser|limonade|cola)\w*/.test(a))return 'drinks';
-  if(/\b(?:nudel|pasta|spaghetti|tagliatelle|penne|makaroni|lasagne|reis|risotto|couscous|bulgur|polenta|linsen|kichererbse|quinoa|haferflocke|gries|griess|paniermehl|semmelbrosel)\w*/.test(a))return 'pantry';
+  const a=norm(value);
+  const has=(...parts)=>parts.some(part=>a.includes(part));
+  const word=part=>new RegExp(`(?:^| )${part}(?: |$)`).test(a);
+
+  if(has('tiefkuhl','tiefgefroren')||word('tk')||word('gefroren'))return 'frozen';
+  if(has('rind','kalb','schwein','lamm','hammel','huhn','huhner','hahn','pute','truthahn','ente','gans','wild','reh','hirsch','kaninchen','hackfleisch','mett','speck','bacon','schinken','salami','wurst','leber','kasseler','filetsteak','schnitzel','kotelett','roulade'))return 'meat';
+  if(has('fisch','lachs','forelle','kabeljau','dorsch','seelachs','heilbutt','zander','barsch','hering','makrele','sardine','thunfisch','seezunge','aal','garnele','shrimp','scampi','krebs','krabbe','hummer','languste','muschel','vongole','tintenfisch','calamari','oktopus'))return 'fish';
+  if(has('apfel','birne','banane','zitrone','limette','orange','mandarine','clementine','grapefruit','beere','erdbeer','himbeer','brombeer','johannisbeer','heidelbeer','kirsche','pfirsich','aprikose','pflaume','zwetschge','traube','melone','ananas','mango','kiwi','avocado','feige','granatapfel','kartoffel','zwiebel','knoblauch','schalotte','lauch','porree','mohre','karotte','sellerie','paprika','tomate','gurke','zucchini','aubergine','kohl','blumenkohl','brokkoli','spargel','bohne','erbse','spinat','mangold','salat','rucola','radicchio','fenchel','kurbis','rettich','radies','rote bete','chicoree','artischocke','chili','peperoni','champignon','pilz','steinpilz','pfifferling','petersilie','schnittlauch','basilikum','dill','koriander','minze','thymian','rosmarin','salbei','estragon','kerbel','majoran','kresse'))return 'produce';
+  if(has('brot','toast','brotchen','baguette','ciabatta','croissant','brezel','fladenbrot','pumpernickel'))return 'bakery';
+  if(has('milch','butter','sahne','schmand','saure sahne','creme fraiche','creme double','quark','joghurt','yoghurt','kefir','buttermilch','eigelb','eiweiss','eiklar','parmesan','pecorino','mozzarella','feta','gouda','emmentaler','gruyere','cheddar','camembert','brie','ricotta','mascarpone','frischkase','gorgonzola','roquefort')||word('ei')||word('eier')||word('kase'))return 'dairy';
+  if(has('tofu','frische pasta','frischer blatterteig','frischer pizzateig','fertigteig','hefeteig','murbeteig')||word('gnocchi'))return 'chilled';
+  if(has('olivenol','olivenoel','sonnenblumenol','sonnenblumenoel','rapsol','rapsoel','erdnussol','erdnussoel','sesamol','sesamoel','walnussol','walnussoel','truffelol','truffeloel','essig','senf','ketchup','mayonnaise','mayo','sojasauce','sojasosse','worcester','tabasco','sambal','chilisauce','fischsauce','austernsauce','pesto','dressing')||word('ol')||word('oel'))return 'sauces';
+  if(has('dosentomate','tomatenmark','kapern','cornichon','gewurzgurke','eingelegt','konserve','artischockenherz')||word('dose')||word('glas')||word('olive')||word('oliven')||word('sardelle')||word('sardellen'))return 'canned';
+  if(has('mehl','zucker','puderzucker','vanillezucker','backpulver','natron','starke','speisestarke','kakao','schokolade','kuverture','gelatine','hefe','mandel','haselnuss','walnuss','pekannuss','pistazie','kokos','rosine','korinthe','marzipan','nougat','honig','sirup'))return 'baking';
+  if(has('paprikapulver','curry','kurkuma','muskat','zimt','nelke','kardamom','kreuzkummel','koriandersaat','senfkorn','lorbeer','wacholder','safran','gewurz','chilipulver','cayenne','vanille','bruhwurfel','bruhe','fond')||word('salz')||word('pfeffer')||word('kummel'))return 'spices';
+  if(has('champagner','prosecco','sherry','portwein','cognac','brandy','wodka','whisky','likor','mineralwasser','limonade')||word('wein')||word('bier')||word('sekt')||word('rum')||word('saft')||word('wasser')||word('cola'))return 'drinks';
+  if(has('nudel','pasta','spaghetti','tagliatelle','penne','makaroni','lasagne','risotto','couscous','bulgur','polenta','linsen','kichererbse','quinoa','haferflocke','gries','griess','paniermehl','semmelbrosel')||word('reis'))return 'pantry';
   return 'other';
 }
 
@@ -238,10 +241,8 @@ function normalizeDroppedHeader(header){
   const previous=previousCategoryHeader(header);
   if(!previous)return;
   const prevCategory=previous.dataset.category;
-  let before=header.previousElementSibling,after=header.nextElementSibling;
-  const splitBefore=before?.classList.contains('shopping-row')&&rowCategory(before)===prevCategory;
-  const splitAfter=after?.classList.contains('shopping-row')&&rowCategory(after)===prevCategory;
-  if(!(splitBefore&&splitAfter))return;
+  let after=header.nextElementSibling;
+  if(!(after?.classList.contains('shopping-row')&&rowCategory(after)===prevCategory))return;
   let last=after;
   while(last.nextElementSibling?.classList.contains('shopping-row')&&rowCategory(last.nextElementSibling)===prevCategory)last=last.nextElementSibling;
   last.after(header);
