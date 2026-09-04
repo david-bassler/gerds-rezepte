@@ -46,8 +46,8 @@ function shoppingMailBody(){
   const rows=[...document.querySelectorAll('.shopping-list .shopping-row')];
   const lines=rows.map(row=>{
     const done=!!row.querySelector('[data-shop-done]')?.checked;
-    const article=row.querySelector('.shopping-name strong')?.textContent?.trim()||'';
-    const amount=row.querySelector('.shopping-amount')?.textContent?.trim()||'';
+    const article=row.querySelector('.shopping-inline-article')?.value?.trim()||row.querySelector('.shopping-name strong')?.textContent?.trim()||'';
+    const amount=row.querySelector('.shopping-inline-amount')?.value?.trim()||row.querySelector('.shopping-amount')?.textContent?.trim()||'';
     return `${done?'☑':'☐'} ${amount?amount+' ':''}${article}`.trim();
   }).filter(Boolean);
   return ['Einkaufsliste','',...lines,'','Gerds Rezepte'].join('\n');
