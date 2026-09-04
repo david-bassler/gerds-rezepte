@@ -319,7 +319,8 @@ function makeGhost(type,source,nodes){
     header.querySelectorAll('button').forEach(button=>button.remove());
     ghost.appendChild(header);
     const count=document.createElement('small');
-    count.textContent=`${Math.max(0,nodes.length-1)} Artikel werden mitverschoben`;
+    const itemCount=Math.max(0,nodes.length-1);
+    count.textContent=`${itemCount} Artikel ${itemCount===1?'wird':'werden'} mitverschoben`;
     ghost.appendChild(count);
   }else{
     const copy=source.cloneNode(true);
