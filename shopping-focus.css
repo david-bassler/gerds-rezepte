@@ -1,6 +1,6 @@
 .shopping-focus-launch{font-weight:800;order:-1}
 body.shopping-focus-mode{overflow:auto;background:#f7f4ed;overscroll-behavior:none;touch-action:pan-y}
-body.shopping-focus-mode .topbar,body.shopping-focus-mode footer,body.shopping-focus-mode .list-head,body.shopping-focus-mode .shopping-note,body.shopping-focus-mode .shopping-sources,body.shopping-focus-mode .shopping-remove,body.shopping-focus-mode .shopping-drag-handle{display:none!important}
+body.shopping-focus-mode .topbar,body.shopping-focus-mode footer,body.shopping-focus-mode .list-head,body.shopping-focus-mode .shopping-manual-form,body.shopping-focus-mode .shopping-note,body.shopping-focus-mode .shopping-sources,body.shopping-focus-mode .shopping-remove,body.shopping-focus-mode .shopping-drag-handle{display:none!important}
 body.shopping-focus-mode #app{min-height:100vh;background:#f7f4ed}
 body.shopping-focus-mode .list-page{padding:0!important;min-height:100vh}
 body.shopping-focus-mode .list-page>.shell{max-width:none!important;width:100%!important;margin:0!important;padding:0!important}
