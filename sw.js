@@ -1,8 +1,8 @@
 'use strict';
 
 const CACHE_PREFIX='gerds-rezepte-';
-const PRECACHE=`${CACHE_PREFIX}precache-v10`;
-const RUNTIME=`${CACHE_PREFIX}runtime-v10`;
+const PRECACHE=`${CACHE_PREFIX}precache-v11`;
+const RUNTIME=`${CACHE_PREFIX}runtime-v11`;
 
 const PRECACHE_URLS=[
   './','./index.html','./404.html','./site.webmanifest',
