@@ -1,284 +1,42 @@
 (()=>{
 'use strict';
-
-const DB_NAME='gerds-rezepte';
-const DB_VERSION=4;
-const STORE='timers';
-const EVENT='gerds:timers-changed';
-const TICK_MS=500;
-let dbPromise=null;
-let timers=new Map();
-let ready=false;
-let tickHandle=0;
-let audioContext=null;
-
+const DB_NAME='gerds-rezepte', STORE='timers';
+const CHANGE_EVENT='gerds:timers-changed';
+let dbPromise=null, timers=[], audioContext=null;
+function openDb(){if(dbPromise)return dbPromise;dbPromise=new Promise((resolve,reject)=>{const req=indexedDB.open(DB_NAME);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)});return dbPromise}
+async function allRows(){const db=await openDb();if(!db.objectStoreNames.contains(STORE))return [];return new Promise((resolve,reject)=>{const req=db.transaction(STORE,'readonly').objectStore(STORE).getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error)})}
+async function put(row){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(row);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
+async function removeRow(id){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const uuid=()=>globalThis.crypto?.randomUUID?.()||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-
-function openDb(){
-  if(dbPromise)return dbPromise;
-  dbPromise=new Promise((resolve,reject)=>{
-    const req=indexedDB.open(DB_NAME,DB_VERSION);
-    req.onupgradeneeded=()=>{
-      const db=req.result;
-      if(!db.objectStoreNames.contains('favorites'))db.createObjectStore('favorites',{keyPath:'recipeId'});
-      if(!db.objectStoreNames.contains('shopping'))db.createObjectStore('shopping',{keyPath:'key'});
-      if(!db.objectStoreNames.contains('recipePlans'))db.createObjectStore('recipePlans',{keyPath:'recipeId'});
-      if(!db.objectStoreNames.contains('recipeNotes'))db.createObjectStore('recipeNotes',{keyPath:'recipeId'});
-      if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:'id'});
-    };
-    req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>reject(req.error);
-  });
-  return dbPromise;
-}
-async function getAll(){const db=await openDb();return new Promise((resolve,reject)=>{const req=db.transaction(STORE,'readonly').objectStore(STORE).getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error)})}
-async function put(value){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(value);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
-async function del(id){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
-
-function remainingMs(timer,now=Date.now()){
-  if(timer.status==='paused')return Math.max(0,Number(timer.remainingMs)||0);
-  if(timer.status==='running')return Math.max(0,Number(timer.endsAt||0)-now);
-  return 0;
-}
-function formatClock(ms){
-  const total=Math.max(0,Math.ceil(ms/1000));
-  const h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;
-  if(h)return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  return `${m}:${String(s).padStart(2,'0')}`;
-}
-function displayDuration(seconds){return window.GerdTimerParser?.format?.(seconds)||`${Math.round(seconds/60)} Min.`}
-function emit(){
-  renderGlobal();
-  window.dispatchEvent(new CustomEvent(EVENT,{detail:{timers:list()}}));
-}
-function list(){return [...timers.values()].sort((a,b)=>{
-  const rank={finished:0,running:1,paused:2};
-  const d=(rank[a.status]??9)-(rank[b.status]??9);
-  if(d)return d;
-  return Number(a.endsAt||a.finishedAt||a.startedAt||0)-Number(b.endsAt||b.finishedAt||b.startedAt||0);
-})}
-function active(){return list().filter(t=>t.status==='running'||t.status==='paused')}
-function get(id){return timers.get(id)||null}
-function forCandidate(recipeId,stepKey,candidateKey){
-  return list().find(t=>t.recipeId===recipeId&&t.stepKey===stepKey&&t.candidateKey===candidateKey&&(t.status==='running'||t.status==='paused'))||null;
-}
-async function persist(timer){timers.set(timer.id,timer);await put(timer);emit();return timer}
-function unlockAudio(){
-  try{
-    const Ctx=window.AudioContext||window.webkitAudioContext;
-    if(!Ctx)return;
-    audioContext=audioContext||new Ctx();
-    if(audioContext.state==='suspended')audioContext.resume().catch(()=>{});
-  }catch{}
-}
-function beep(){
-  try{
-    const Ctx=window.AudioContext||window.webkitAudioContext;
-    if(!Ctx)return;
-    audioContext=audioContext||new Ctx();
-    const play=()=>{
-      const now=audioContext.currentTime;
-      [0,.28,.56].forEach((offset,index)=>{
-        const osc=audioContext.createOscillator(),gain=audioContext.createGain();
-        osc.type='sine';osc.frequency.value=index===2?880:740;
-        gain.gain.setValueAtTime(.0001,now+offset);
-        gain.gain.exponentialRampToValueAtTime(.22,now+offset+.02);
-        gain.gain.exponentialRampToValueAtTime(.0001,now+offset+.19);
-        osc.connect(gain);gain.connect(audioContext.destination);
-        osc.start(now+offset);osc.stop(now+offset+.21);
-      });
-    };
-    if(audioContext.state==='suspended')audioContext.resume().then(play).catch(()=>{});else play();
-  }catch{}
-}
-function vibrate(){try{navigator.vibrate?.([250,120,250,120,420])}catch{}}
-async function notify(timer){
-  if(!('Notification' in window)||Notification.permission!=='granted')return;
-  try{
-    const registration=await navigator.serviceWorker?.ready;
-    if(!registration)return;
-    await registration.showNotification(`${timer.label} · Timer abgelaufen`,{
-      body:`${timer.recipeTitle} · ${displayDuration(timer.durationSeconds)}`,
-      icon:'assets/images/icon-192.png',
-      badge:'assets/images/icon-192.png',
-      tag:`gerds-timer-${timer.id}`,
-      renotify:true,
-      data:{timerId:timer.id,recipeId:timer.recipeId,stepIndex:timer.stepIndex}
-    });
-  }catch(error){console.warn('Timer-Benachrichtigung fehlgeschlagen.',error)}
-}
-function finishToast(timer){
-  document.getElementById(`timer-finished-${CSS.escape(timer.id)}`)?.remove();
-  const el=document.createElement('div');
-  el.className='timer-finished-toast';
-  el.id=`timer-finished-${timer.id}`;
-  const extra=Number(timer.rangeExtraSeconds)||0;
-  el.innerHTML=`<div><span>Timer abgelaufen</span><strong>${esc(timer.label)}</strong><small>${esc(timer.recipeTitle)}</small></div><div class="timer-finished-actions">${extra?`<button type="button" data-timer-extra>+${esc(displayDuration(extra))}</button>`:''}<button type="button" data-timer-step>Zum Schritt</button><button type="button" class="timer-finished-dismiss" aria-label="Meldung schließen">×</button></div>`;
-  document.body.appendChild(el);
-  el.querySelector('[data-timer-extra]')?.addEventListener('click',()=>{restart(timer.id,extra);el.remove()});
-  el.querySelector('[data-timer-step]')?.addEventListener('click',()=>openStep(timer));
-  el.querySelector('.timer-finished-dismiss')?.addEventListener('click',()=>el.remove());
-}
-async function markFinished(timer,{alert=true}={}){
-  if(!timer||timer.status!=='running')return;
-  timer={...timer,status:'finished',finishedAt:Date.now(),endsAt:Number(timer.endsAt)||Date.now()};
-  timers.set(timer.id,timer);
-  try{await put(timer)}catch(error){console.warn('Timerstatus konnte nicht gespeichert werden.',error)}
-  if(alert){beep();vibrate();notify(timer);finishToast(timer)}
-  emit();
-}
-function checkExpired({alert=true}={}){
-  const now=Date.now();
-  for(const timer of [...timers.values()])if(timer.status==='running'&&Number(timer.endsAt)<=now)markFinished(timer,{alert});
-}
-function ensureTick(){
-  if(tickHandle)return;
-  tickHandle=setInterval(()=>{
-    checkExpired({alert:true});
-    renderCountdowns();
-  },TICK_MS);
-}
-async function start(candidate,context={}){
-  await whenReady();
-  unlockAudio();
-  const duration=Math.max(1,Math.round(Number(candidate.durationSeconds||candidate.minSeconds)||0));
-  const now=Date.now();
-  const timer={
-    id:`timer:${uuid()}`,
-    recipeId:String(context.recipeId||''),
-    recipeTitle:String(context.recipeTitle||'Rezept'),
-    stepKey:String(context.stepKey||''),
-    stepIndex:Number.isInteger(context.stepIndex)?context.stepIndex:0,
-    phase:String(context.phase||''),
-    source:String(context.source||''),
-    candidateKey:String(candidate.key||''),
-    label:String(candidate.label&&candidate.label!=='Timer'?candidate.label:(context.phase||'Timer')),
-    durationSeconds:duration,
-    minSeconds:Number(candidate.minSeconds)||duration,
-    maxSeconds:Number(candidate.maxSeconds)||duration,
-    rangeExtraSeconds:Number(candidate.rangeExtraSeconds)||0,
-    startedAt:now,
-    endsAt:now+duration*1000,
-    remainingMs:null,
-    status:'running',
-    createdAt:now,
-    updatedAt:now
-  };
-  return persist(timer);
-}
-async function pause(id){
-  const timer=get(id);if(!timer||timer.status!=='running')return null;
-  return persist({...timer,status:'paused',remainingMs:remainingMs(timer),pausedAt:Date.now(),updatedAt:Date.now()});
-}
-async function resume(id){
-  const timer=get(id);if(!timer||timer.status!=='paused')return null;
-  unlockAudio();
-  const ms=Math.max(1000,Number(timer.remainingMs)||1000),now=Date.now();
-  return persist({...timer,status:'running',endsAt:now+ms,remainingMs:null,pausedAt:null,updatedAt:now});
-}
-async function addTime(id,seconds){
-  const timer=get(id);if(!timer)return null;
-  seconds=Math.round(Number(seconds)||0);if(!seconds)return timer;
-  const now=Date.now();
-  if(timer.status==='paused')return persist({...timer,remainingMs:Math.max(1000,remainingMs(timer)+seconds*1000),updatedAt:now});
-  if(timer.status==='finished')return restart(id,seconds);
-  return persist({...timer,endsAt:Math.max(now,Number(timer.endsAt)||now)+seconds*1000,updatedAt:now});
-}
-async function restart(id,seconds){
-  const timer=get(id);if(!timer)return null;
-  unlockAudio();
-  const duration=Math.max(1,Math.round(Number(seconds)||timer.durationSeconds||60)),now=Date.now();
-  document.getElementById(`timer-finished-${CSS.escape(id)}`)?.remove();
-  return persist({...timer,durationSeconds:duration,startedAt:now,endsAt:now+duration*1000,remainingMs:null,status:'running',finishedAt:null,updatedAt:now,rangeExtraSeconds:0});
-}
-async function stop(id){
-  timers.delete(id);
-  try{await del(id)}catch(error){console.warn('Timer konnte nicht gelöscht werden.',error)}
-  document.getElementById(`timer-finished-${CSS.escape(id)}`)?.remove();
-  emit();
-}
-function openStep(timer){
-  if(!timer)return;
-  document.querySelector('.timer-finished-toast')?.remove();
-  const open=()=>window.GerdCookMode?.openAt?.(timer.stepIndex,timer.recipeId);
-  if((location.hash||'')===`#rezept=${encodeURIComponent(timer.recipeId)}`&&document.querySelector('.detail')){open();return}
-  try{sessionStorage.setItem('gerds-open-cook-step',JSON.stringify({recipeId:timer.recipeId,stepIndex:timer.stepIndex}))}catch{}
-  location.href=`./#rezept=${encodeURIComponent(timer.recipeId)}`;
-  location.reload();
-}
-async function requestNotifications(){
-  if(!('Notification' in window))return 'unsupported';
-  if(Notification.permission!=='default')return Notification.permission;
-  try{return await Notification.requestPermission()}catch{return Notification.permission}
-}
-function timerRow(timer){
-  const finished=timer.status==='finished',paused=timer.status==='paused';
-  const clock=finished?'Fertig':formatClock(remainingMs(timer));
-  return `<article class="global-timer-row ${finished?'is-finished':''}" data-global-timer="${esc(timer.id)}"><button type="button" class="global-timer-main" data-global-timer-step><span>${esc(timer.label)}</span><strong data-timer-clock>${esc(clock)}</strong><small>${esc(timer.recipeTitle)}</small></button><div class="global-timer-controls">${finished?(timer.rangeExtraSeconds?`<button type="button" data-global-extra>+${esc(displayDuration(timer.rangeExtraSeconds))}</button>`:''):`<button type="button" data-global-pause>${paused?'Weiter':'Pause'}</button><button type="button" data-global-add>+1 Min.</button>`}<button type="button" data-global-stop>${finished?'Entfernen':'Beenden'}</button></div></article>`;
-}
-function ensureGlobal(){
-  let root=document.getElementById('globalTimers');
-  if(root)return root;
-  root=document.createElement('div');
-  root.id='globalTimers';root.className='global-timers';
-  root.innerHTML='<button type="button" class="global-timer-toggle" data-global-timer-toggle aria-expanded="false"><span aria-hidden="true">⏱</span><strong data-global-timer-summary>Timer</strong></button><div class="global-timer-panel" data-global-timer-panel hidden><div class="global-timer-head"><strong>Timer</strong><button type="button" data-global-timer-close aria-label="Timer schließen">×</button></div><div data-global-timer-list></div><button type="button" class="global-timer-notifications" data-global-notifications hidden>Benachrichtigungen erlauben</button></div>';
-  document.body.appendChild(root);
-  root.querySelector('[data-global-timer-toggle]').addEventListener('click',()=>togglePanel());
-  root.querySelector('[data-global-timer-close]').addEventListener('click',()=>togglePanel(false));
-  root.querySelector('[data-global-notifications]').addEventListener('click',async()=>{await requestNotifications();renderGlobal()});
-  root.addEventListener('click',event=>{
-    const row=event.target.closest('[data-global-timer]');if(!row)return;
-    const id=row.dataset.globalTimer,timer=get(id);if(!timer)return;
-    if(event.target.closest('[data-global-timer-step]'))openStep(timer);
-    else if(event.target.closest('[data-global-pause]'))timer.status==='paused'?resume(id):pause(id);
-    else if(event.target.closest('[data-global-add]'))addTime(id,60);
-    else if(event.target.closest('[data-global-extra]'))restart(id,timer.rangeExtraSeconds||60);
-    else if(event.target.closest('[data-global-stop]'))stop(id);
-  });
-  return root;
-}
-function togglePanel(force){
-  const root=ensureGlobal(),panel=root.querySelector('[data-global-timer-panel]'),button=root.querySelector('[data-global-timer-toggle]');
-  const open=typeof force==='boolean'?force:panel.hidden;
-  panel.hidden=!open;button.setAttribute('aria-expanded',String(open));
-}
-function renderCountdowns(){
-  document.querySelectorAll('[data-global-timer]').forEach(row=>{
-    const timer=get(row.dataset.globalTimer),clock=row.querySelector('[data-timer-clock]');
-    if(timer&&clock)clock.textContent=timer.status==='finished'?'Fertig':formatClock(remainingMs(timer));
-  });
-  const current=active();
-  const summary=document.querySelector('[data-global-timer-summary]');
-  if(summary&&current.length===1)summary.textContent=`${current[0].label} · ${formatClock(remainingMs(current[0]))}`;
-}
-function renderGlobal(){
-  if(!ready)return;
-  const root=ensureGlobal(),all=list(),activeTimers=all.filter(t=>t.status==='running'||t.status==='paused'),finished=all.filter(t=>t.status==='finished');
-  root.classList.toggle('has-timers',all.length>0);
-  const summary=root.querySelector('[data-global-timer-summary]');
-  if(activeTimers.length===1)summary.textContent=`${activeTimers[0].label} · ${formatClock(remainingMs(activeTimers[0]))}`;
-  else if(activeTimers.length>1)summary.textContent=`${activeTimers.length} Timer laufen`;
-  else if(finished.length)summary.textContent=`${finished.length} Timer fertig`;
-  else summary.textContent='Timer';
-  root.querySelector('[data-global-timer-list]').innerHTML=all.map(timerRow).join('')||'<p class="global-timer-empty">Keine Timer aktiv.</p>';
-  const permission=root.querySelector('[data-global-notifications]');
-  permission.hidden=!(all.length&&'Notification' in window&&Notification.permission==='default');
-  if(!all.length)togglePanel(false);
-}
-function whenReady(){return ready?Promise.resolve():new Promise(resolve=>window.addEventListener('gerds:timers-ready',resolve,{once:true}))}
-
-(async()=>{
-  try{
-    const rows=await getAll();
-    timers=new Map(rows.filter(x=>x?.id).map(x=>[x.id,x]));
-  }catch(error){console.warn('Timer konnten nicht geladen werden.',error)}
-  ready=true;
-  checkExpired({alert:true});
-  renderGlobal();
-  ensureTick();
-  window.dispatchEvent(new Event('gerds:timers-ready'));
-})();
-
-window.GerdTimers={start,pause,resume,addTime,restart,stop,get,list,active,forCandidate,remainingMs,formatClock,displayDuration,requestNotifications,openStep,whenReady,EVENT};
+const uid=()=>globalThis.crypto?.randomUUID?.()||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+const copy=x=>x?JSON.parse(JSON.stringify(x)):null;
+function remainingMs(timer,now=Date.now()){if(timer?.status==='paused')return Math.max(0,Number(timer.pausedRemainingMs)||0);if(timer?.status==='running')return Math.max(0,(Number(timer.endsAt)||0)-now);return 0}
+function clock(ms){const total=Math.max(0,Math.ceil((Number(ms)||0)/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}
+function duration(seconds){return window.GerdTimerParser?.format?.(seconds)||`${Math.round(seconds/60)} Min.`}
+function current(){const rank={finished:0,running:1,paused:2};return timers.filter(t=>['running','paused','finished'].includes(t.status)).sort((a,b)=>(rank[a.status]-rank[b.status])||((a.endsAt||Infinity)-(b.endsAt||Infinity)))}
+function findCandidate(recipeId,stepIndex,candidateKey){return [...timers].reverse().find(t=>t.recipeId===recipeId&&Number(t.cookStepIndex)===Number(stepIndex)&&t.candidateKey===candidateKey&&['running','paused','finished'].includes(t.status))||null}
+function emit(){renderDock();renderManager();window.dispatchEvent(new CustomEvent(CHANGE_EVENT,{detail:{timers:current().map(copy)}}))}
+function primeAudio(){try{const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;if(!audioContext)audioContext=new Ctx();if(audioContext.state==='suspended')audioContext.resume().catch(()=>{})}catch{}}
+function chime(){try{primeAudio();if(!audioContext)return;const now=audioContext.currentTime;[[0,880],[.18,1046.5],[.36,1318.5]].forEach(([delay,freq])=>{const osc=audioContext.createOscillator(),gain=audioContext.createGain();osc.frequency.value=freq;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.exponentialRampToValueAtTime(.16,now+delay+.015);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+.22);osc.connect(gain).connect(audioContext.destination);osc.start(now+delay);osc.stop(now+delay+.24)})}catch{}}
+function promptNotifications(){if(!('Notification' in window)||Notification.permission!=='default'||document.getElementById('timerPermission'))return;try{if(localStorage.getItem('gerds-timer-notification-choice-v1'))return}catch{}const box=document.createElement('div');box.id='timerPermission';box.className='timer-permission';box.innerHTML='<div><strong>Timer-Benachrichtigungen</strong><span>Auch beim Weiterkochen benachrichtigt werden.</span></div><button type="button" data-allow>Erlauben</button><button type="button" data-later>Später</button>';document.body.appendChild(box);box.querySelector('[data-allow]').addEventListener('click',async()=>{try{await Notification.requestPermission()}catch{}try{localStorage.setItem('gerds-timer-notification-choice-v1','asked')}catch{}box.remove()});box.querySelector('[data-later]').addEventListener('click',()=>{try{localStorage.setItem('gerds-timer-notification-choice-v1','later')}catch{}box.remove()})}
+async function notify(timer){if(!document.hidden||!('Notification' in window)||Notification.permission!=='granted')return;const url=new URL('./',location.href);url.searchParams.set('cookRecipe',timer.recipeId);url.searchParams.set('cookStep',String(timer.cookStepIndex));url.hash=`rezept=${encodeURIComponent(timer.recipeId)}`;try{const reg=await navigator.serviceWorker?.ready;await reg?.showNotification?.(`${timer.label} – Zeit ist um`,{body:timer.recipeTitle,tag:`gerds-timer-${timer.id}`,renotify:true,icon:'assets/images/icon-192.png',badge:'assets/images/icon-192.png',data:{url:url.href}})}catch{}}
+function alertFinished(timer,late=false){let stack=document.getElementById('timerAlerts');if(!stack){stack=document.createElement('div');stack.id='timerAlerts';stack.className='timer-alerts';stack.setAttribute('aria-live','assertive');document.body.appendChild(stack)}document.getElementById(`timer-alert-${timer.id}`)?.remove();const extra=Math.max(0,(timer.maxSeconds||0)-(timer.durationSeconds||0)),box=document.createElement('div');box.className='timer-alert';box.id=`timer-alert-${timer.id}`;box.innerHTML=`<div><span>⏱ Zeit ist um</span><strong>${esc(timer.label)}</strong><small>${esc(timer.recipeTitle)} · Schritt ${timer.cookStepIndex+1}${late?' · inzwischen abgelaufen':''}</small></div><div class="timer-alert-actions">${extra?`<button data-extra="${extra}">+${esc(duration(extra))}</button>`:''}<button data-goto>Zum Schritt</button><button data-done aria-label="Erledigt">×</button></div>`;stack.appendChild(box);box.querySelector('[data-extra]')?.addEventListener('click',()=>addTime(timer.id,extra));box.querySelector('[data-goto]').addEventListener('click',()=>gotoStep(timer.id));box.querySelector('[data-done]').addEventListener('click',()=>stop(timer.id))}
+async function finish(timer,late=false){if(!timer||timer.status!=='running')return;timer.status='finished';timer.finishedAt=Date.now();timer.updatedAt=Date.now();await put(timer);emit();alertFinished(timer,late);if(!late){chime();try{navigator.vibrate?.([220,120,220,120,360])}catch{}}notify(timer)}
+function updateLive(now=Date.now()){document.querySelectorAll('[data-live-timer-id]').forEach(el=>{const timer=timers.find(t=>t.id===el.dataset.liveTimerId);if(!timer)return;el.textContent=timer.status==='finished'?'Zeit ist um':timer.status==='paused'?`Pause · ${clock(remainingMs(timer,now))}`:clock(remainingMs(timer,now))})}
+function tick(){const now=Date.now();for(const timer of timers)if(timer.status==='running'&&Number(timer.endsAt)<=now)void finish(timer);updateLive(now);renderDock()}
+async function start(payload){primeAudio();const old=findCandidate(payload.recipeId,payload.cookStepIndex,payload.candidateKey);if(old&&old.status!=='finished')return copy(old);const seconds=Math.max(5,Math.round(Number(payload.durationSeconds)||0));if(!seconds)return null;const now=Date.now(),timer={id:`timer:${uid()}`,recipeId:String(payload.recipeId||''),recipeTitle:String(payload.recipeTitle||'Rezept'),cookStepIndex:Number(payload.cookStepIndex)||0,phase:String(payload.phase||''),source:String(payload.source||''),stepText:String(payload.stepText||''),candidateKey:String(payload.candidateKey||''),label:String(payload.label||'Timer'),minSeconds:Math.max(5,Math.round(Number(payload.minSeconds)||seconds)),maxSeconds:Math.max(seconds,Math.round(Number(payload.maxSeconds)||seconds)),durationSeconds:seconds,status:'running',startedAt:now,endsAt:now+seconds*1000,pausedRemainingMs:null,createdAt:now,updatedAt:now};timers.push(timer);await put(timer);emit();promptNotifications();return copy(timer)}
+async function pause(id){const t=timers.find(x=>x.id===id);if(!t||t.status!=='running')return;t.pausedRemainingMs=remainingMs(t);t.endsAt=null;t.status='paused';t.updatedAt=Date.now();await put(t);emit()}
+async function resume(id){const t=timers.find(x=>x.id===id);if(!t||t.status!=='paused')return;t.endsAt=Date.now()+Math.max(1000,t.pausedRemainingMs||1000);t.pausedRemainingMs=null;t.status='running';t.updatedAt=Date.now();primeAudio();await put(t);emit()}
+async function addTime(id,seconds){const t=timers.find(x=>x.id===id);seconds=Math.max(1,Math.round(Number(seconds)||0));if(!t||!seconds)return;if(t.status==='paused')t.pausedRemainingMs=Math.max(0,t.pausedRemainingMs||0)+seconds*1000;else{t.endsAt=Math.max(Date.now(),Number(t.endsAt)||Date.now())+seconds*1000;t.status='running'}t.durationSeconds=(t.durationSeconds||0)+seconds;t.finishedAt=null;t.updatedAt=Date.now();document.getElementById(`timer-alert-${id}`)?.remove();primeAudio();await put(t);emit()}
+async function stop(id){const i=timers.findIndex(t=>t.id===id);if(i<0)return;timers.splice(i,1);document.getElementById(`timer-alert-${id}`)?.remove();try{await removeRow(id)}catch(error){console.warn('Timer konnte nicht gelöscht werden.',error)}emit()}
+function gotoStep(id){const t=timers.find(x=>x.id===id);if(!t)return;closeManager();const m=(location.hash||'').match(/^#rezept=(.+)$/),currentId=m?decodeURIComponent(m[1]):'',detail={recipeId:t.recipeId,cookStepIndex:t.cookStepIndex};if(currentId===t.recipeId){window.dispatchEvent(new CustomEvent('gerds:open-cook-step',{detail}));return}try{sessionStorage.setItem('gerds-cook-open-step',JSON.stringify(detail))}catch{}location.href=`./#rezept=${encodeURIComponent(t.recipeId)}`}
+function rowHtml(t){const status=t.status==='finished'?'Zeit ist um':t.status==='paused'?'Pausiert':clock(remainingMs(t)),extra=Math.max(0,(t.maxSeconds||0)-(t.durationSeconds||0));return `<article class="timer-row ${t.status==='finished'?'is-finished':''}"><div class="timer-row-copy"><span>${esc(t.recipeTitle)} · Schritt ${t.cookStepIndex+1}</span><strong>${esc(t.label)}</strong><b data-live-timer-id="${esc(t.id)}">${status}</b></div><div class="timer-row-actions">${t.status==='running'?`<button data-action="pause" data-id="${esc(t.id)}">Pause</button>`:''}${t.status==='paused'?`<button data-action="resume" data-id="${esc(t.id)}">Weiter</button>`:''}${t.status==='finished'&&extra?`<button data-action="extra" data-seconds="${extra}" data-id="${esc(t.id)}">+${esc(duration(extra))}</button>`:''}${t.status!=='finished'?`<button data-action="plus" data-id="${esc(t.id)}">+1 Min.</button>`:''}<button data-action="goto" data-id="${esc(t.id)}">Zum Schritt</button><button data-action="stop" data-id="${esc(t.id)}">${t.status==='finished'?'Erledigt':'Beenden'}</button></div></article>`}
+function ensureManager(){if(document.getElementById('timerManager'))return;document.body.insertAdjacentHTML('beforeend','<dialog class="timer-manager" id="timerManager"><div class="timer-manager-head"><div><span>Gerds Rezepte</span><h2>Timer</h2></div><button data-close aria-label="Schließen">×</button></div><div class="timer-list" data-timer-list></div></dialog>');const dialog=document.getElementById('timerManager');dialog.querySelector('[data-close]').addEventListener('click',closeManager);dialog.addEventListener('click',event=>{if(event.target===dialog)closeManager();const b=event.target.closest('[data-action]');if(!b)return;const id=b.dataset.id,a=b.dataset.action;if(a==='pause')pause(id);if(a==='resume')resume(id);if(a==='plus')addTime(id,60);if(a==='extra')addTime(id,Number(b.dataset.seconds)||0);if(a==='goto')gotoStep(id);if(a==='stop')stop(id)})}
+function renderManager(){ensureManager();const list=document.querySelector('[data-timer-list]');if(!list)return;const rows=current();list.innerHTML=rows.length?rows.map(rowHtml).join(''):'<p class="timer-empty">Zurzeit läuft kein Timer.</p>'}
+function openManager(){ensureManager();renderManager();const d=document.getElementById('timerManager');if(d.showModal)d.showModal();else d.setAttribute('open','')}
+function closeManager(){const d=document.getElementById('timerManager');if(!d)return;if(d.open&&d.close)d.close();else d.removeAttribute('open')}
+function renderDock(){let dock=document.getElementById('timerDock'),rows=current();if(!rows.length){dock?.remove();return}if(!dock){dock=document.createElement('button');dock.id='timerDock';dock.type='button';dock.className='timer-dock';dock.addEventListener('click',openManager);document.body.appendChild(dock)}const finished=rows.find(t=>t.status==='finished'),next=rows.find(t=>t.status==='running')||rows.find(t=>t.status==='paused');if(finished){dock.classList.add('is-finished');dock.innerHTML=`<span>⏱</span><strong>Zeit ist um</strong><small>${esc(finished.label)}</small>`}else if(rows.length===1&&next){dock.classList.remove('is-finished');dock.innerHTML=`<span>⏱</span><strong>${esc(next.label)}</strong><small data-live-timer-id="${esc(next.id)}">${next.status==='paused'?`Pause · ${clock(remainingMs(next))}`:clock(remainingMs(next))}</small>`}else{dock.classList.remove('is-finished');dock.innerHTML=`<span>⏱</span><strong>${rows.length} Timer</strong><small>${next?clock(remainingMs(next)):'anzeigen'}</small>`}}
+async function init(){try{timers=(await allRows()).filter(t=>t?.id);const now=Date.now();for(const t of timers)if(t.status==='running'&&Number(t.endsAt)<=now){t.status='finished';t.finishedAt=t.endsAt||now;t.updatedAt=now;await put(t);alertFinished(t,true)}}catch(error){console.warn('Timer konnten nicht geladen werden.',error)}emit();setInterval(tick,500);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')tick()})}
+window.GerdTimers={start,pause,resume,addTime,stop,getAll:()=>current().map(copy),getForStep:(recipeId,stepIndex,key)=>copy(findCandidate(recipeId,stepIndex,key)),formatClock:clock,remainingMs,openManager,gotoStep};
+init();
 })();
