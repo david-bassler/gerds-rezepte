@@ -56,6 +56,11 @@ function shoppingMailBody(){
     if(line)lines.push(line);
   };
   for(const child of [...list.children]){
+    if(child.classList.contains('shopping-category-header')){
+      const label=child.querySelector('strong')?.textContent?.trim();
+      if(label){if(lines.length&&lines[lines.length-1]!=='')lines.push('');lines.push(label)}
+      continue;
+    }
     if(child.classList.contains('shopping-category-block')){
       const label=child.querySelector(':scope > .shopping-category-header strong')?.textContent?.trim();
       if(label){if(lines.length&&lines[lines.length-1]!=='')lines.push('');lines.push(label)}
