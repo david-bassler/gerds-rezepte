@@ -1,20 +1,53 @@
+.shopping-list{display:grid;gap:8px}
+.shopping-category-header{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin:14px 2px 2px;padding:8px 10px;border-radius:11px;background:rgba(41,72,58,.07);color:#29483a}
+.shopping-category-header:first-child{margin-top:2px}
+.shopping-category-header>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0}
+.shopping-category-header strong{font:700 16px Georgia,serif}
+.shopping-category-header small{font-size:10px;font-weight:700;color:#758179;white-space:nowrap}
+.shopping-category-drag,.shopping-drag-handle{width:30px;height:34px;padding:0;border:0;background:transparent;color:#6b786f;display:grid;place-items:center;cursor:grab;border-radius:8px;touch-action:none;user-select:none;-webkit-user-select:none}
+.shopping-category-drag{width:28px;height:30px}
+.shopping-category-drag:hover,.shopping-drag-handle:hover{color:#29483a;background:rgba(41,72,58,.06)}
+.shopping-category-drag:focus-visible,.shopping-drag-handle:focus-visible{outline:2px solid #29483a;outline-offset:1px}
+.shopping-category-drag svg,.shopping-drag-handle svg{width:16px;height:20px;display:block;fill:currentColor;pointer-events:none}
 .shopping-row{grid-template-columns:auto auto minmax(0,1fr) auto auto}
-.shopping-drag-handle{width:30px;height:34px;padding:0;border:0;background:transparent;color:#6b786f;display:grid;place-items:center;cursor:grab;border-radius:8px;touch-action:none;user-select:none;-webkit-user-select:none}
-.shopping-drag-handle:hover{color:#29483a;background:rgba(41,72,58,.06)}
-.shopping-drag-handle:focus-visible{outline:2px solid #29483a;outline-offset:1px}
-.shopping-drag-handle svg{width:16px;height:20px;display:block;fill:currentColor;pointer-events:none}
+.shopping-category-badge{display:inline-block!important;width:max-content;max-width:100%;margin-top:5px!important;padding:3px 7px;border-radius:999px;background:rgba(169,92,61,.09);color:#96533a!important;font-size:9px!important;font-weight:800;line-height:1.2;text-decoration:none!important}
+.shopping-row.shopping-is-loose{border-style:dashed;border-color:rgba(169,92,61,.28)}
+.shopping-row.shopping-is-loose .shopping-drag-handle{color:#9b6048}
 .shopping-sortable-ghost{opacity:0!important;visibility:hidden!important}
 .shopping-sortable-chosen{position:relative;z-index:8;box-shadow:0 22px 48px rgba(34,43,34,.18),0 6px 16px rgba(34,43,34,.1);border-color:rgba(41,72,58,.26)!important;transform:scale(1.012);cursor:grabbing}
+.shopping-category-header.shopping-sortable-chosen{box-shadow:0 16px 34px rgba(34,43,34,.15);background:#edf1ed}
 .shopping-sortable-drag,.sortable-fallback{opacity:1!important;background:#fff!important;box-shadow:0 24px 54px rgba(34,43,34,.2),0 6px 16px rgba(34,43,34,.11)!important;border-color:rgba(41,72,58,.26)!important;transform:scale(1.012);cursor:grabbing!important}
-.shopping-sortable-chosen .shopping-drag-handle,.shopping-sortable-drag .shopping-drag-handle,.sortable-fallback .shopping-drag-handle{cursor:grabbing;color:#29483a;background:rgba(41,72,58,.06)}
+.shopping-category-header.shopping-sortable-drag,.shopping-category-header.sortable-fallback{background:#edf1ed!important}
+.shopping-sortable-chosen .shopping-drag-handle,.shopping-sortable-drag .shopping-drag-handle,.sortable-fallback .shopping-drag-handle,.shopping-sortable-chosen .shopping-category-drag,.shopping-sortable-drag .shopping-category-drag,.sortable-fallback .shopping-category-drag{cursor:grabbing;color:#29483a;background:rgba(41,72,58,.06)}
 body.shopping-drag-active{cursor:grabbing;user-select:none;-webkit-user-select:none}
+.shopping-row.is-manual{grid-template-columns:auto auto minmax(0,1fr) auto auto auto}
+.shopping-row.is-editing{grid-template-columns:auto auto minmax(0,1fr)}
+.shopping-row.is-editing .shopping-inline-edit{grid-column:3/-1}
 @media(max-width:680px){
+  .shopping-category-header{margin-top:12px;padding:7px 8px}
+  .shopping-category-header strong{font-size:15px}
   .shopping-row{grid-template-columns:auto auto minmax(0,1fr) auto}
   .shopping-drag-handle{grid-column:1;grid-row:1 / span 2;align-self:center;width:28px}
   .shopping-check{grid-column:2;grid-row:1}
   .shopping-name{grid-column:3;grid-row:1}
   .shopping-amount{grid-column:3;grid-row:2;text-align:left}
   .shopping-remove{grid-column:4;grid-row:1 / span 2;align-self:center}
+  .shopping-row.is-manual{grid-template-columns:auto auto minmax(0,1fr) auto auto}
+  .shopping-row.is-manual .shopping-drag-handle{grid-column:1}
+  .shopping-row.is-manual .shopping-check{grid-column:2}
+  .shopping-row.is-manual .shopping-name{grid-column:3}
+  .shopping-row.is-manual .shopping-amount{grid-column:3}
+  .shopping-row.is-manual .shopping-edit{grid-column:4;grid-row:1 / span 2}
+  .shopping-row.is-manual .shopping-remove{grid-column:5;grid-row:1 / span 2}
+  .shopping-row.is-editing{grid-template-columns:auto auto minmax(0,1fr)}
+  .shopping-row.is-editing .shopping-inline-edit{grid-column:3/-1}
 }
 @media(prefers-reduced-motion:reduce){.shopping-sortable-chosen,.shopping-sortable-drag,.sortable-fallback{transform:none}}
-@media print{body[data-route="shopping"] .shopping-drag-handle{display:none!important}}
+@media print{
+  body[data-route="shopping"] .shopping-category-drag,body[data-route="shopping"] .shopping-drag-handle{display:none!important}
+  body[data-route="shopping"] .shopping-category-header{display:block!important;grid-column:1/-1!important;margin:4mm 0 1mm!important;padding:0 0 1mm!important;border:0!important;border-bottom:1.5px solid #555!important;border-radius:0!important;background:transparent!important;color:#000!important;break-after:avoid!important}
+  body[data-route="shopping"] .shopping-category-header strong{font-size:11pt!important;color:#000!important}
+  body[data-route="shopping"] .shopping-category-header small{display:none!important}
+  body[data-route="shopping"] .shopping-category-badge{padding:0!important;margin:1px 0 0!important;background:transparent!important;color:#555!important;font-size:7pt!important}
+  body[data-route="shopping"] .shopping-row.shopping-is-loose{border-style:solid!important}
+}
