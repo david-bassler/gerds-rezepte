@@ -1,13 +1,13 @@
 'use strict';
 
 const CACHE_PREFIX='gerds-rezepte-';
-const PRECACHE=`${CACHE_PREFIX}precache-v9`;
-const RUNTIME=`${CACHE_PREFIX}runtime-v9`;
+const PRECACHE=`${CACHE_PREFIX}precache-v10`;
+const RUNTIME=`${CACHE_PREFIX}runtime-v10`;
 
 const PRECACHE_URLS=[
   './','./index.html','./404.html','./site.webmanifest',
   './styles.css','./lists.css','./nav-icons.css','./shopping-ui.css','./shopping-reorder.css','./shopping-focus.css','./pwa.css','./personal-data.css','./cook-mode.css','./timers.css',
-  './recipes-data.js','./data-fixes.js','./editorial-fixes.js','./shopping-eligibility.js','./recipe-card.js','./app.js','./glossary-boundary-fixes.js','./ingredient-ui.js','./lists.js','./shopping-ui.js','./vendor/sortable.min.js','./shopping-reorder.js','./shopping-focus.js','./timer-parser.js','./timers.js','./cook-mode.js','./personal-data.js','./pwa.js',
+  './recipes-data.js','./data-fixes.js','./editorial-fixes.js','./shopping-eligibility.js','./recipe-card.js','./app.js','./glossary-boundary-fixes.js','./ingredient-ui.js','./lists.js','./shopping-ui.js','./shopping-reorder.js','./shopping-focus.js','./timer-parser.js','./timers.js','./cook-mode.js','./personal-data.js','./pwa.js',
   './assets/images/logo-kitchen.svg','./assets/images/icon-192.png','./assets/images/icon-512.png','./assets/images/icon-maskable-512.png','./assets/images/apple-touch-icon.png','./assets/images/hero-kitchen.webp','./assets/images/category-sprite.webp','./assets/images/cuisine-sprite.webp','./assets/images/neue-kartoffeln-garnelen-gruner-spargel-sahne-1.webp','./assets/images/neue-kartoffeln-garnelen-gruner-spargel-sahne-2.webp','./assets/images/schweineschnitzel-kartoffelkruste-schmand-1.webp','./assets/images/schweineschnitzel-kartoffelkruste-schmand-2.webp','./assets/images/spaghetti-alle-vongole-1.webp','./assets/images/spaghetti-alle-vongole-2.webp','./assets/images/spareribs-barbecue-1.webp','./assets/images/spareribs-barbecue-2.webp','./assets/images/spargel-grun-riesengarnelen-sahne-neue-kartoffeln-1.webp','./assets/images/spargel-grun-riesengarnelen-sahne-neue-kartoffeln-2.webp'
 ];
 
