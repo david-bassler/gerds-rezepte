@@ -44,21 +44,17 @@ self.addEventListener('fetch',event=>{
 
 self.addEventListener('notificationclick',event=>{
   event.notification.close();
-  const data=event.notification.data||{};
-  const recipeId=String(data.recipeId||'');
-  const stepIndex=Number(data.stepIndex)||0;
+  const data=event.notification.data||{},recipeId=String(data.recipeId||'');
   const target=new URL('./',self.registration.scope);
   if(recipeId)target.hash=`rezept=${encodeURIComponent(recipeId)}`;
   event.waitUntil((async()=>{
     const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-    for(const client of windows){
-      if(new URL(client.url).origin===target.origin){
-        await client.focus();
-        client.postMessage({type:'OPEN_COOK_STEP',recipeId,stepIndex});
-        return;
-      }
+    const client=windows.find(item=>new URL(item.url).origin===target.origin);
+    if(client){
+      try{await client.navigate(target.href)}catch{}
+      await client.focus();
+      return;
     }
-    const opened=await self.clients.openWindow(target.href);
-    if(opened)opened.postMessage({type:'OPEN_COOK_STEP',recipeId,stepIndex});
+    await self.clients.openWindow(target.href);
   })());
 });
