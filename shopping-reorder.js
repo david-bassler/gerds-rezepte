@@ -2,9 +2,10 @@
 'use strict';
 
 const STORAGE_KEY='gerds-shopping-order-v1';
-const VERSION=2;
+const VERSION=3;
 const CATEGORY_PREFIX='category:';
 const ITEM_PREFIX='item:';
+const SORT_GROUP='gerds-shopping';
 const DEFAULT_CATEGORY_ORDER=[
   'produce','bakery','meat','fish','dairy','chilled','pantry','canned','baking','spices','sauces','drinks','frozen','household','other'
 ];
@@ -27,17 +28,17 @@ const CATEGORIES={
 };
 
 let queued=false;
-let sortable=null;
+let layoutSortable=null;
+let itemSortables=[];
 let activeList=null;
-let dragInfo=null;
+let persistQueued=false;
 
 function isShoppingPage(){return location.hash==='#einkaufsliste'||document.body.dataset.route==='shopping'}
 function isDragging(){return document.body.classList.contains('shopping-drag-active')}
 function isEditing(){return !!document.querySelector('.shopping-row.is-editing')}
 function reducedMotion(){return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches}
 function norm(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,' ').trim()}
-function rowsOf(list){return [...list.querySelectorAll(':scope > .shopping-row')]}
-function headersOf(list){return [...list.querySelectorAll(':scope > .shopping-category-header')]}
+function allRows(list){return [...list.querySelectorAll('.shopping-row')]}
 function rowKey(row){return row?.dataset.shopKey||row?.dataset.shoppingKey||row?.querySelector('[data-shop-done]')?.dataset.shopDone||''}
 function tokenForRow(row){const key=rowKey(row);return key?`${ITEM_PREFIX}${key}`:''}
 function tokenForCategory(id){return `${CATEGORY_PREFIX}${id}`}
@@ -93,17 +94,33 @@ function readState(){
 function normalizedCategoryOrder(saved=[]){
   return [...saved.filter((id,index)=>CATEGORIES[id]&&saved.indexOf(id)===index),...DEFAULT_CATEGORY_ORDER.filter(id=>!saved.includes(id))];
 }
+function flattenDom(list){
+  const sequence=[];
+  for(const child of [...list.children]){
+    if(child.classList.contains('shopping-category-block')){
+      const id=child.dataset.category;
+      if(id)sequence.push(tokenForCategory(id));
+      child.querySelectorAll(':scope > .shopping-category-items > .shopping-row').forEach(row=>sequence.push(tokenForRow(row)));
+    }else if(child.classList.contains('shopping-row'))sequence.push(tokenForRow(child));
+  }
+  return sequence.filter(Boolean);
+}
 function saveState(list){
   const previous=readState();
-  const sequence=[...list.children].map(el=>{
-    if(el.classList.contains('shopping-category-header'))return tokenForCategory(el.dataset.category);
-    if(el.classList.contains('shopping-row'))return tokenForRow(el);
-    return '';
-  }).filter(Boolean);
+  const sequence=flattenDom(list);
   const visibleOrder=sequence.map(categoryFromToken).filter(Boolean);
   const categoryOrder=[...visibleOrder,...normalizedCategoryOrder(previous.categoryOrder).filter(id=>!visibleOrder.includes(id))];
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify({version:VERSION,categoryOrder,sequence}))}
   catch(error){console.warn('Reihenfolge der Einkaufsliste konnte nicht gespeichert werden.',error)}
+}
+function queuePersist(list){
+  if(persistQueued)return;
+  persistQueued=true;
+  requestAnimationFrame(()=>{
+    persistQueued=false;
+    decorateRows(list);
+    saveState(list);
+  });
 }
 function buildInitialSequence(rows,state){
   const order=normalizedCategoryOrder(state.categoryOrder);
@@ -169,121 +186,108 @@ function normalizeSequence(rows,state){
 }
 function headerHtml(id,count){
   const label=CATEGORIES[id]?.label||CATEGORIES.other.label;
-  return `<div class="shopping-category-header" data-category="${id}"><button type="button" class="shopping-category-drag" aria-label="${label} verschieben" title="Kategorie verschieben">${dragIcon()}</button><div><strong>${label}</strong><small>${count} Artikel</small></div></div>`;
+  return `<div class="shopping-category-header"><button type="button" class="shopping-category-drag" aria-label="${label} verschieben" title="Kategorie verschieben">${dragIcon()}</button><div><strong>${label}</strong><small>${count} Artikel</small></div></div>`;
+}
+function blockHtml(id,count){
+  return `<section class="shopping-category-block" data-category="${id}">${headerHtml(id,count)}<div class="shopping-category-items" data-category-items="${id}"></div></section>`;
 }
 function applySequence(list){
-  const rows=rowsOf(list);
+  const rows=allRows(list);
   if(!rows.length)return;
-  rows.forEach(row=>{row.dataset.shopKey=rowKey(row);rowCategory(row)});
-  list.querySelectorAll(':scope > .shopping-category-header').forEach(header=>header.remove());
+  rows.forEach(row=>{row.dataset.shopKey=rowKey(row);rowCategory(row);row.remove()});
+  list.querySelectorAll(':scope > .shopping-category-block,:scope > .shopping-category-header').forEach(node=>node.remove());
+
   const state=readState(),normalized=normalizeSequence(rows,state);
   const counts=new Map();
   rows.forEach(row=>counts.set(rowCategory(row),(counts.get(rowCategory(row))||0)+1));
-  const nodes=new Map(rows.map(row=>[tokenForRow(row),row]));
+  const rowByToken=new Map(rows.map(row=>[tokenForRow(row),row]));
+  const blocks=new Map();
   for(const category of normalized.categoryOrder){
-    if(counts.get(category))nodes.set(tokenForCategory(category),document.createRange().createContextualFragment(headerHtml(category,counts.get(category))).firstElementChild);
+    if(!counts.get(category))continue;
+    const block=document.createRange().createContextualFragment(blockHtml(category,counts.get(category))).firstElementChild;
+    blocks.set(category,block);
   }
-  normalized.sequence.forEach(token=>{const node=nodes.get(token);if(node)list.appendChild(node)});
+
+  let activeBlock=null;
+  for(const token of normalized.sequence){
+    const category=categoryFromToken(token);
+    if(category){
+      const block=blocks.get(category);
+      if(block){list.appendChild(block);activeBlock=block}
+      continue;
+    }
+    const row=rowByToken.get(token);
+    if(!row)continue;
+    const categoryId=rowCategory(row);
+    if(activeBlock?.dataset.category===categoryId){
+      activeBlock.querySelector('.shopping-category-items')?.appendChild(row);
+    }else{
+      list.appendChild(row);
+      activeBlock=null;
+    }
+  }
+  for(const row of rows)if(!row.isConnected)list.appendChild(row);
   decorateRows(list);
   const currentState=readState();
   if(currentState.version!==VERSION||currentState.legacyOrder?.length||JSON.stringify(currentState.sequence)!==JSON.stringify(normalized.sequence))saveState(list);
 }
 function decorateRows(list){
-  let activeCategory=null;
-  for(const child of [...list.children]){
-    if(child.classList.contains('shopping-category-header')){activeCategory=child.dataset.category;continue}
-    if(!child.classList.contains('shopping-row'))continue;
-    ensureRowHandle(child);
-    const category=rowCategory(child);
-    const attached=activeCategory===category;
-    child.classList.toggle('shopping-is-loose',!attached);
-    let badge=child.querySelector('.shopping-category-badge');
+  list.querySelectorAll('.shopping-row').forEach(row=>{
+    ensureRowHandle(row);
+    const parentBlock=row.closest('.shopping-category-block');
+    const attached=!!parentBlock&&parentBlock.dataset.category===rowCategory(row);
+    row.classList.toggle('shopping-is-loose',!attached);
+    let badge=row.querySelector('.shopping-category-badge');
     if(!attached){
       if(!badge){
         badge=document.createElement('span');
         badge.className='shopping-category-badge';
-        const name=child.querySelector('.shopping-name');
-        name?.appendChild(badge);
+        row.querySelector('.shopping-name')?.appendChild(badge);
       }
-      if(badge)badge.textContent=CATEGORIES[category]?.label||CATEGORIES.other.label;
-      activeCategory=null;
+      if(badge)badge.textContent=CATEGORIES[rowCategory(row)]?.label||CATEGORIES.other.label;
     }else badge?.remove();
-  }
+  });
 }
-function attachedRows(header){
-  const id=header?.dataset.category,rows=[];
-  let node=header?.nextElementSibling;
-  while(node?.classList.contains('shopping-row')&&rowCategory(node)===id){rows.push(node);node=node.nextElementSibling}
-  return rows;
-}
-function categoryBlock(header){return [header,...attachedRows(header)]}
-function previousCategoryHeader(node){
-  let current=node?.previousElementSibling;
-  while(current){if(current.classList.contains('shopping-category-header'))return current;current=current.previousElementSibling}
+function categoryBlocks(list){return [...list.querySelectorAll(':scope > .shopping-category-block')]}
+function previousCategoryBlock(block){
+  let node=block?.previousElementSibling;
+  while(node){if(node.classList.contains('shopping-category-block'))return node;node=node.previousElementSibling}
   return null;
 }
-function nextCategoryHeader(node){
-  let current=node?.nextElementSibling;
-  while(current){if(current.classList.contains('shopping-category-header'))return current;current=current.nextElementSibling}
+function nextCategoryBlock(block){
+  let node=block?.nextElementSibling;
+  while(node){if(node.classList.contains('shopping-category-block'))return node;node=node.nextElementSibling}
   return null;
 }
-function normalizeDroppedRow(row){
-  if(!row)return;
-  const previous=previousCategoryHeader(row);
-  if(!previous||previous.dataset.category===rowCategory(row))return;
-  let next=row.nextElementSibling,last=null;
-  while(next&&!next.classList.contains('shopping-category-header')){
-    if(next.classList.contains('shopping-row')&&rowCategory(next)===previous.dataset.category){last=next;next=next.nextElementSibling;continue}
-    break;
-  }
-  if(last)last.after(row);
-}
-function normalizeDroppedHeader(header){
-  if(!header)return;
-  const previous=previousCategoryHeader(header);
-  if(!previous)return;
-  const prevCategory=previous.dataset.category;
-  let after=header.nextElementSibling;
-  if(!(after?.classList.contains('shopping-row')&&rowCategory(after)===prevCategory))return;
-  let last=after;
-  while(last.nextElementSibling?.classList.contains('shopping-row')&&rowCategory(last.nextElementSibling)===prevCategory)last=last.nextElementSibling;
-  last.after(header);
-}
-function persistDomOrder(list){decorateRows(list);saveState(list)}
-function moveCategoryKeyboard(header,direction){
-  const list=header?.parentElement;if(!list)return;
-  const block=categoryBlock(header);
-  if(direction<0){
-    const previous=previousCategoryHeader(header);if(!previous)return;
-    previous.before(...block);
-  }else{
-    const next=nextCategoryHeader(block[block.length-1]);if(!next)return;
-    const nextBlock=categoryBlock(next),last=nextBlock[nextBlock.length-1];
-    last.after(...block);
-  }
-  persistDomOrder(list);
+function moveCategoryKeyboard(block,direction){
+  const list=block?.parentElement;if(!list)return;
+  if(direction<0){const previous=previousCategoryBlock(block);if(previous)previous.before(block)}
+  else{const next=nextCategoryBlock(block);if(next)next.after(block)}
+  queuePersist(list);
 }
 function keyboardMove(event){
   if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
   const handle=event.currentTarget;
-  const header=handle.closest('.shopping-category-header');
-  if(header){
+  const block=handle.closest('.shopping-category-block');
+  if(block&&handle.classList.contains('shopping-category-drag')){
     event.preventDefault();
-    if(event.key==='ArrowUp')moveCategoryKeyboard(header,-1);
-    else if(event.key==='ArrowDown')moveCategoryKeyboard(header,1);
-    else if(event.key==='Home'){const block=categoryBlock(header);header.parentElement.prepend(...block);persistDomOrder(header.parentElement)}
-    else if(event.key==='End'){const block=categoryBlock(header);header.parentElement.append(...block);persistDomOrder(header.parentElement)}
-    handle.focus();return;
+    const list=block.parentElement;
+    if(event.key==='ArrowUp')moveCategoryKeyboard(block,-1);
+    else if(event.key==='ArrowDown')moveCategoryKeyboard(block,1);
+    else if(event.key==='Home')list.prepend(block);
+    else if(event.key==='End')list.append(block);
+    queuePersist(list);handle.focus();return;
   }
-  const row=handle.closest('.shopping-row'),list=row?.parentElement;
-  if(!row||!list)return;
+  const row=handle.closest('.shopping-row'),container=row?.parentElement;
+  if(!row||!container)return;
   event.preventDefault();
-  if(event.key==='ArrowUp'){const previous=row.previousElementSibling;if(previous)list.insertBefore(row,previous)}
-  else if(event.key==='ArrowDown'){const next=row.nextElementSibling;if(next)list.insertBefore(row,next.nextElementSibling)}
-  else if(event.key==='Home')list.prepend(row);
-  else if(event.key==='End')list.append(row);
-  normalizeDroppedRow(row);
-  persistDomOrder(list);
+  const siblings=[...container.children].filter(node=>node.classList.contains('shopping-row'));
+  const index=siblings.indexOf(row);
+  if(event.key==='ArrowUp'&&index>0)container.insertBefore(row,siblings[index-1]);
+  else if(event.key==='ArrowDown'&&index>=0&&index<siblings.length-1)siblings[index+1].after(row);
+  else if(event.key==='Home')container.prepend(row);
+  else if(event.key==='End')container.append(row);
+  queuePersist(row.closest('.shopping-list'));
   handle.focus();
 }
 function ensureRowHandle(row){
@@ -310,17 +314,37 @@ function bindCategoryHandles(list){
     handle.addEventListener('keydown',keyboardMove);
   });
 }
-function destroySortable(){
-  if(sortable){try{sortable.destroy()}catch{}sortable=null}
-  activeList=null;dragInfo=null;
+function destroySortables(){
+  if(layoutSortable){try{layoutSortable.destroy()}catch{}layoutSortable=null}
+  itemSortables.forEach(instance=>{try{instance.destroy()}catch{}});
+  itemSortables=[];
+  activeList=null;
   document.body.classList.remove('shopping-drag-active');
 }
-function initSortable(list){
-  if(activeList===list&&sortable)return;
-  destroySortable();activeList=list;bindCategoryHandles(list);
-  if(!window.Sortable){console.warn('Drag & Drop ist nicht verfügbar; die Einkaufsliste bleibt per Tastatur sortierbar.');return}
-  sortable=window.Sortable.create(list,{
-    draggable:'.shopping-category-header,.shopping-row',
+function dragStart(){document.body.classList.add('shopping-drag-active')}
+function dragEnd(list){
+  document.body.classList.remove('shopping-drag-active');
+  queuePersist(list);
+  queueSync();
+}
+function canPutIntoCategory(to,from,dragEl){
+  if(!dragEl?.classList.contains('shopping-row'))return false;
+  const block=to.el.closest('.shopping-category-block');
+  return !!block&&rowCategory(dragEl)===block.dataset.category;
+}
+function initSortables(list){
+  if(activeList===list&&layoutSortable)return;
+  destroySortables();
+  activeList=list;
+  bindCategoryHandles(list);
+  if(!window.Sortable){
+    console.warn('Drag & Drop ist nicht verfügbar; die Einkaufsliste bleibt per Tastatur sortierbar.');
+    return;
+  }
+
+  layoutSortable=window.Sortable.create(list,{
+    group:{name:SORT_GROUP,pull:true,put:(to,from,dragEl)=>dragEl?.classList.contains('shopping-row')},
+    draggable:'.shopping-category-block,.shopping-row.shopping-is-loose',
     handle:'.shopping-category-drag,.shopping-drag-handle',
     animation:reducedMotion()?0:170,
     easing:'cubic-bezier(.2,.72,.25,1)',
@@ -330,49 +354,62 @@ function initSortable(list){
     forceFallback:false,
     fallbackOnBody:true,
     fallbackTolerance:4,
-    swapThreshold:.62,
+    swapThreshold:.58,
     scroll:true,
     scrollSensitivity:64,
     scrollSpeed:12,
-    onStart(event){
-      document.body.classList.add('shopping-drag-active');
-      const item=event.item;
-      dragInfo=item.classList.contains('shopping-category-header')
-        ?{type:'category',category:item.dataset.category,attachedKeys:attachedRows(item).map(rowKey)}
-        :{type:'item',key:rowKey(item)};
-    },
-    onEnd(event){
-      const item=event.item;
-      if(dragInfo?.type==='category'){
-        normalizeDroppedHeader(item);
-        let anchor=item;
-        for(const key of dragInfo.attachedKeys||[]){
-          const row=rowsOf(list).find(candidate=>rowKey(candidate)===key);
-          if(row){anchor.after(row);anchor=row}
-        }
-      }else normalizeDroppedRow(item);
-      persistDomOrder(list);
-      dragInfo=null;
-      document.body.classList.remove('shopping-drag-active');
-      queueSync();
-    }
+    onStart:dragStart,
+    onAdd:event=>{event.item.classList.add('shopping-is-loose');dragEnd(list)},
+    onEnd:()=>dragEnd(list)
+  });
+
+  list.querySelectorAll('.shopping-category-items').forEach(items=>{
+    const instance=window.Sortable.create(items,{
+      group:{name:SORT_GROUP,pull:true,put:canPutIntoCategory},
+      draggable:'.shopping-row',
+      handle:'.shopping-drag-handle',
+      animation:reducedMotion()?0:150,
+      easing:'cubic-bezier(.2,.72,.25,1)',
+      ghostClass:'shopping-sortable-ghost',
+      chosenClass:'shopping-sortable-chosen',
+      dragClass:'shopping-sortable-drag',
+      forceFallback:false,
+      fallbackOnBody:true,
+      fallbackTolerance:4,
+      swapThreshold:.6,
+      scroll:true,
+      scrollSensitivity:64,
+      scrollSpeed:12,
+      onStart:dragStart,
+      onAdd:()=>dragEnd(list),
+      onRemove:()=>dragEnd(list),
+      onEnd:()=>dragEnd(list)
+    });
+    itemSortables.push(instance);
   });
 }
 function sync(){
   queued=false;
   if(isDragging()||isEditing())return;
-  if(!isShoppingPage()){destroySortable();return}
+  if(!isShoppingPage()){destroySortables();return}
   const list=document.querySelector('.shopping-list');
-  if(!list){destroySortable();return}
+  if(!list){destroySortables();return}
   applySequence(list);
   bindCategoryHandles(list);
-  initSortable(list);
+  initSortables(list);
 }
 function queueSync(){
   if(isDragging()||isEditing()||queued)return;
   queued=true;requestAnimationFrame(sync);
 }
+
 new MutationObserver(queueSync).observe(document.body,{childList:true,subtree:true,characterData:true});
 window.addEventListener('popstate',queueSync);
 queueSync();
+
+window.GerdShoppingOrderDebug={
+  readState,
+  flatten:()=>{const list=document.querySelector('.shopping-list');return list?flattenDom(list):[]},
+  categories:()=>{const list=document.querySelector('.shopping-list');return list?categoryBlocks(list).map(block=>block.dataset.category):[]}
+};
 })();
