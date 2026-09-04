@@ -19,41 +19,46 @@ function isDetail(){return !!currentRecipe()&&!!document.querySelector('.detail'
 function isActive(){return !!state&&document.body.classList.contains(MODE_CLASS)}
 function text(el){return el?.textContent?.replace(/\s+/g,' ').trim()||''}
 function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function phaseSteps(root,label,source=''){
+function phaseSteps(root,label,source='',sourceKey='main'){
   if(!root)return [];
   return [...root.querySelectorAll(':scope > .steps > li')].map((li,index)=>({
-    label,source,index:index+1,text:text(li.querySelector('span')||li)
+    label,source,sourceKey,index:index+1,text:text(li.querySelector('span')||li)
   }));
 }
-function collectSteps(){
+function collectAllSteps(){
   const steps=[];
   const sections=[...document.querySelectorAll('.recipe-content .process-section')];
   for(const section of sections){
     const label=text(section.querySelector('.section-title'))||'Zubereitung';
-    steps.push(...phaseSteps(section,label));
+    steps.push(...phaseSteps(section,label,'','main'));
   }
-  for(const details of document.querySelectorAll('#subrecipes .subrecipe')){
+  [...document.querySelectorAll('#subrecipes .subrecipe')].forEach((details,subIndex)=>{
     const source=text(details.querySelector(':scope > summary'))||'Unterrezept';
+    const sourceKey=`sub:${subIndex}`;
     const inner=details.querySelector('.sub-inner');
-    if(!inner)continue;
+    if(!inner)return;
     const headings=[...inner.querySelectorAll('h3')];
     for(const heading of headings){
       const label=text(heading);
       const list=heading.nextElementSibling;
       if(list?.classList.contains('steps')){
         [...list.querySelectorAll(':scope > li')].forEach((li,index)=>steps.push({
-          label,source,index:index+1,text:text(li.querySelector('span')||li)
+          label,source,sourceKey,index:index+1,text:text(li.querySelector('span')||li)
         }));
       }
     }
-  }
+  });
   steps.forEach((step,index)=>{
     step.globalIndex=index;
-    step.key=`${step.source||'Hauptrezept'}::${step.label}::${step.index}`;
+    step.key=`${step.sourceKey}::${step.label}::${step.index}`;
   });
   return steps;
 }
-function collectIngredients(){
+function collectSteps(scope='all'){
+  const steps=collectAllSteps();
+  return scope==='all'?steps:steps.filter(step=>step.sourceKey===scope);
+}
+function collectIngredients(scope='all'){
   const groups=[];
   const add=(title,root)=>{
     if(!root)return;
@@ -65,11 +70,18 @@ function collectIngredients(){
     }
     if(rows.length)groups.push({title,rows});
   };
-  add('Hauptrezept',document.getElementById('mainIngredients'));
-  document.querySelectorAll('#subrecipes .subrecipe').forEach(details=>{
+  if(scope==='all'||scope==='main')add('Hauptrezept',document.getElementById('mainIngredients'));
+  [...document.querySelectorAll('#subrecipes .subrecipe')].forEach((details,index)=>{
+    if(scope!=='all'&&scope!==`sub:${index}`)return;
     add(text(details.querySelector(':scope > summary'))||'Unterrezept',details);
   });
   return groups;
+}
+function scopeTitle(scope,recipe){
+  if(scope==='all'||scope==='main')return recipe?.title||'Rezept';
+  const match=String(scope).match(/^sub:(\d+)$/);
+  const details=match?document.querySelectorAll('#subrecipes .subrecipe')[Number(match[1])]:null;
+  return text(details?.querySelector(':scope > summary'))||recipe?.title||'Unterrezept';
 }
 function ingredientHtml(groups){
   return groups.map(group=>`<section class="cook-ingredient-group"><h3>${esc(group.title)}</h3><ul>${group.rows.map(row=>`<li><strong>${esc(row.amount)}</strong><span>${esc(row.name)}</span></li>`).join('')}</ul></section>`).join('');
@@ -77,14 +89,24 @@ function ingredientHtml(groups){
 function ensureButton(){
   if(!isDetail())return;
   const actions=document.querySelector('.detail-actions');
-  if(!actions||actions.querySelector('#cookModeLaunch'))return;
-  const button=document.createElement('button');
-  button.type='button';
-  button.id='cookModeLaunch';
-  button.className='cook-mode-launch';
-  button.textContent='Kochmodus';
-  button.addEventListener('click',()=>enter());
-  actions.prepend(button);
+  if(actions&&!actions.querySelector('#cookModeLaunch')){
+    const button=document.createElement('button');
+    button.type='button';
+    button.id='cookModeLaunch';
+    button.className='cook-mode-launch';
+    button.textContent='Kochmodus';
+    button.addEventListener('click',()=>enter({scope:'all'}));
+    actions.prepend(button);
+  }
+  [...document.querySelectorAll('#subrecipes .subrecipe')].forEach((details,index)=>{
+    if(details.querySelector(':scope > .cook-subrecipe-action'))return;
+    const source=text(details.querySelector(':scope > summary'))||'Unterrezept';
+    const action=document.createElement('div');
+    action.className='cook-subrecipe-action';
+    action.innerHTML=`<button type="button" data-cook-subrecipe="${index}">Kochmodus für „${esc(source)}“</button>`;
+    details.querySelector(':scope > .sub-inner')?.before(action);
+    action.querySelector('button')?.addEventListener('click',()=>enter({scope:`sub:${index}`}));
+  });
 }
 async function acquireWakeLock(){
   if(!isActive()||!navigator.wakeLock?.request||document.visibilityState!=='visible')return;
@@ -203,19 +225,27 @@ function toggleIngredients(force){
   sheet.setAttribute('aria-hidden',String(!open));
   document.querySelector('[data-cook-ingredients]')?.setAttribute('aria-expanded',String(open));
 }
-function enter({stepIndex=0}={}){
-  const recipe=currentRecipe(),steps=collectSteps();
+function enter({stepIndex=0,scope='all'}={}){
+  const recipe=currentRecipe(),steps=collectSteps(scope);
   if(!recipe||!steps.length){
-    window.alert('Für dieses Rezept sind keine Arbeitsschritte hinterlegt.');
+    window.alert(scope==='all'?'Für dieses Rezept sind keine Arbeitsschritte hinterlegt.':'Für dieses Unterrezept sind keine Arbeitsschritte hinterlegt.');
     return;
   }
+  const requestedGlobal=Number(stepIndex)||0;
+  let localIndex=scope==='all'?requestedGlobal:steps.findIndex(step=>step.globalIndex===requestedGlobal);
+  if(localIndex<0)localIndex=0;
+  localIndex=Math.max(0,Math.min(steps.length-1,localIndex));
   if(isActive()){
-    state.index=Math.max(0,Math.min(steps.length-1,Number(stepIndex)||0));
+    state.scope=scope;
+    state.steps=steps;
+    state.ingredients=collectIngredients(scope);
+    state.index=localIndex;
+    state.title=scopeTitle(scope,recipe);
     render();
     return;
   }
-  const ingredients=collectIngredients();
-  state={recipe,steps,ingredients,index:Math.max(0,Math.min(steps.length-1,Number(stepIndex)||0))};
+  const ingredients=collectIngredients(scope);
+  state={recipe,scope,title:scopeTitle(scope,recipe),steps,ingredients,index:localIndex};
   document.body.classList.add(MODE_CLASS);
   const overlay=document.createElement('div');
   overlay.className='cook-mode';
@@ -224,7 +254,7 @@ function enter({stepIndex=0}={}){
   overlay.setAttribute('aria-label',`Kochmodus: ${recipe.title}`);
   overlay.innerHTML=`
     <div class="cook-mode-top">
-      <div class="cook-mode-title"><span>Kochmodus</span><strong>${esc(recipe.title)}</strong></div>
+      <div class="cook-mode-title"><span>${scope==='all'?'Kochmodus':'Unterrezept · Kochmodus'}</span><strong>${esc(state.title)}</strong></div>
       <div class="cook-mode-tools">
         <button type="button" data-cook-ingredients aria-expanded="false">Zutaten</button>
         <button type="button" class="cook-mode-close" data-cook-close aria-label="Kochmodus schließen">×</button>
@@ -279,7 +309,7 @@ function leave(){
 function openAt(stepIndex,recipeId){
   const recipe=currentRecipe();
   if(!recipe||recipeId&&recipe.id!==recipeId)return false;
-  enter({stepIndex:Number(stepIndex)||0});
+  enter({stepIndex:Number(stepIndex)||0,scope:'all'});
   return true;
 }
 function startSwipe(event){
@@ -305,7 +335,7 @@ function maybeOpenPending(){
     const pending=JSON.parse(raw),recipe=currentRecipe();
     if(!pending||pending.recipeId!==recipe?.id)return;
     sessionStorage.removeItem('gerds-open-cook-step');
-    enter({stepIndex:Number(pending.stepIndex)||0});
+    enter({stepIndex:Number(pending.stepIndex)||0,scope:'all'});
   }catch{sessionStorage.removeItem('gerds-open-cook-step')}
 }
 document.addEventListener('pointerdown',startSwipe);
