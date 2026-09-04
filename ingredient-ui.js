@@ -93,7 +93,7 @@ function tokenIsSingular(token){
   return values.length>0&&values.every(value=>Number.isFinite(value)&&Math.abs(value-1)<1e-9);
 }
 function inflectShoppingText(text){
-  return String(text||'').replace(/([0-9][0-9.,]*(?:–[0-9][0-9.,]*)?)\s+(Scheibe|Blatt|Zweig|Bund|Dose|Beet|Prise)\b/g,(all,quantity,unit)=>{
+  return String(text||'').replace(/([0-9][0-9.,]*(?:–[0-9][0-9.,]*)?)\s+(Scheibe|Blatt|Zweig|Bund|Dose|Beet|Prise|Zehe|Zehen|Knolle|Knollen)\b/g,(all,quantity,unit)=>{
     const forms=SHOPPING_FORMS[unit];
     return `${quantity} ${tokenIsSingular(quantity)?forms[0]:forms[1]}`;
   });
