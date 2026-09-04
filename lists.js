@@ -103,6 +103,19 @@ function normalizeContributionAmount(purchase,article,amount){
 }
 function contributionId(recipeId,tableKey,index){return `${recipeId}::${tableKey}::${index}`}
 function sourceCount(item){return new Set((item.contributions||[]).flatMap(c=>c.sourceIds?.length?c.sourceIds:[c.recipeId]).filter(Boolean)).size}
+function isManualShoppingItem(item){return !!(item&&(item.manual===true||item.kind==='manual'||String(item.key||'').startsWith('manual:')))}
+function manualShoppingKey(){
+  const uuid=globalThis.crypto?.randomUUID?.();
+  return `manual:${uuid||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
+}
+function normalizeManualShoppingItem(item){
+  return {
+    ...item,key:item.key||manualShoppingKey(),manual:true,kind:'manual',purchaseId:null,
+    article:String(item.article||'').trim(),manualAmount:String(item.manualAmount||'').trim(),
+    contributions:[],amounts:[],note:'',done:!!item.done,
+    createdAt:item.createdAt||Date.now(),updatedAt:item.updatedAt||Date.now()
+  };
+}
 
 function recipeById(id){return DATA.recipes.find(r=>r.id===id)}
 function defaultTarget(recipe){return recipe.scaleType==='factor'?1:recipe.baseScale}
@@ -242,7 +255,14 @@ function rebuildShoppingFromContributions(contributions,previousItems=[]){
   }
   return [...grouped.entries()].map(([key,bucket])=>buildPurchaseItem(bucket.purchase,bucket.entries,previous.get(key)||{}));
 }
-function rebuildShoppingFromSources(items=shopping){return rebuildShoppingFromContributions(items.flatMap(item=>item.contributions||[]),items)}
+function rebuildShoppingWithManual(contributions,previousItems=shopping){
+  const recipeItems=previousItems.filter(item=>!isManualShoppingItem(item));
+  const manualItems=previousItems.filter(isManualShoppingItem).map(normalizeManualShoppingItem);
+  return [...rebuildShoppingFromContributions(contributions,recipeItems),...manualItems];
+}
+function rebuildShoppingFromSources(items=shopping){
+  return rebuildShoppingWithManual(items.filter(item=>!isManualShoppingItem(item)).flatMap(item=>item.contributions||[]),items);
+}
 
 function contributionFromLegacy(item,index){
   const purchase=resolvePurchase(item.article);
@@ -253,9 +273,10 @@ function contributionFromLegacy(item,index){
   return {id:`legacy:${item.key||index}`,recipeId:(item.sources||[])[0]||'',sourceIds:item.sources||[],legacyDone:!!item.done,article:item.article,component:purchase.component||'whole',amount:normalizeContributionAmount(purchase,item.article,amount)};
 }
 async function migrateShopping(items){
-  const contributions=[];
+  const contributions=[],manualItems=[];
   let needsWrite=false;
   items.forEach((item,index)=>{
+    if(isManualShoppingItem(item)){manualItems.push(normalizeManualShoppingItem(item));return}
     if(Array.isArray(item.contributions)&&item.purchaseId)item.contributions.forEach(c=>contributions.push(c));
     else{contributions.push(contributionFromLegacy(item,index));needsWrite=true}
   });
@@ -272,9 +293,10 @@ async function migrateShopping(items){
   }
   if(seededPlans.length)await Promise.all(seededPlans.map(record=>put(PLANS,record)));
 
-  const out=rebuildShoppingFromContributions(contributions,items);
+  const recipeItems=items.filter(item=>!isManualShoppingItem(item));
+  const out=[...rebuildShoppingFromContributions(contributions,recipeItems),...manualItems];
   const upgradedRefs=contributions.some(c=>sourceRefFromContribution(c)&&(!c.sourceRef||c.amount));
-  if(needsWrite||upgradedRefs||items.some(x=>!x.purchaseId)||items.length!==out.length)await replaceAll(SHOPPING,out);
+  if(needsWrite||upgradedRefs||recipeItems.some(x=>!x.purchaseId)||items.length!==out.length)await replaceAll(SHOPPING,out);
   return out;
 }
 function formatAmountPart(item){
@@ -289,7 +311,10 @@ function formatAmountPart(item){
   }
   return item.text||'nach Bedarf';
 }
-function displayAmount(item){return (item.amounts||[]).map(formatAmountPart).join(' + ')||'nach Bedarf'}
+function displayAmount(item){
+  if(isManualShoppingItem(item))return item.manualAmount||'';
+  return (item.amounts||[]).map(formatAmountPart).join(' + ')||'nach Bedarf';
+}
 
 function persistStateSnapshot(){
   const shoppingSnapshot=shopping.map(item=>({...item,contributions:(item.contributions||[]).map(c=>({...c,sourceRef:c.sourceRef?{...c.sourceRef}:undefined,amount:c.amount?{...c.amount}:undefined})),amounts:(item.amounts||[]).map(a=>({...a}))}));
@@ -354,7 +379,7 @@ async function toggleShoppingIngredient(recipe,table,ingredient,target,id){
       amount:normalizeContributionAmount(purchase,ingredient.article,normalizedAmount(ingredient,tableFactor(table,target,recipe)))
     });
   }
-  shopping=rebuildShoppingFromContributions(contributions,shopping);
+  shopping=rebuildShoppingWithManual(contributions,shopping);
   updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();
   try{
     await persistStateSnapshot();
@@ -364,6 +389,17 @@ async function toggleShoppingIngredient(recipe,table,ingredient,target,id){
     updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();
     console.warn('Einkaufsliste konnte nicht gespeichert werden.',error);
   }
+}
+async function addManualShopping(article,amount){
+  const name=String(article||'').trim(),manualAmount=String(amount||'').trim();
+  if(!name)return;
+  const before=shopping;
+  shopping=[...shopping,normalizeManualShoppingItem({
+    key:manualShoppingKey(),article:name,manualAmount,done:false,createdAt:Date.now(),updatedAt:Date.now()
+  })];
+  updateCounts();if(currentListRoute()==='shopping')renderShopping();
+  try{await persistStateSnapshot()}
+  catch(error){shopping=before;updateCounts();if(currentListRoute()==='shopping')renderShopping();console.warn('Manueller Einkaufsartikel konnte nicht gespeichert werden.',error)}
 }
 async function removeShopping(key){
   const before=shopping;shopping=shopping.filter(x=>x.key!==key);
@@ -396,9 +432,14 @@ function renderFavorites(){
 }
 function renderShopping(){
   const app=document.getElementById('app'),rows=[...shopping].sort((a,b)=>Number(a.done)-Number(b.done)||a.article.localeCompare(b.article,'de'));
-  app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Einkaufsliste</h1><p>${rows.length?`${rows.length} Einkaufsartikel`:'Noch keine Zutaten hinzugefügt.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearShopping">Liste leeren</button></div>':''}</div>${rows.length?`<div class="shopping-list">${rows.map(x=>`<div class="shopping-row ${x.done?'is-done':''}"><input class="shopping-check" type="checkbox" ${x.done?'checked':''} data-shop-done="${esc(x.key)}" aria-label="Erledigt"><div class="shopping-name"><strong>${esc(x.article)}</strong><small>${sourceCount(x)} Rezept${sourceCount(x)===1?'':'e'}${x.note?` · ${esc(x.note)}`:''}</small></div><div class="shopping-amount">${esc(displayAmount(x))}</div><button class="shopping-remove" type="button" data-shop-remove="${esc(x.key)}" aria-label="Entfernen">×</button></div>`).join('')}</div>`:'<div class="shopping-empty">In einer Rezeptansicht einfach eine Zutat anklicken. Ein zweiter Klick entfernt genau diese Rezeptzutat wieder.</div>'}</div></div>`;
+  const manualForm='<form class="shopping-manual-form" id="manualShoppingForm"><input type="text" id="manualShoppingArticle" maxlength="120" autocomplete="off" aria-label="Artikel" placeholder="Artikel hinzufügen" required><input type="text" id="manualShoppingAmount" maxlength="80" autocomplete="off" aria-label="Menge, optional" placeholder="Menge (optional)"><button type="submit">Hinzufügen</button></form>';
+  app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Einkaufsliste</h1><p>${rows.length?`${rows.length} Einkaufsartikel`:'Noch keine Artikel hinzugefügt.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearShopping">Liste leeren</button></div>':''}</div>${manualForm}${rows.length?`<div class="shopping-list">${rows.map(x=>`<div class="shopping-row ${x.done?'is-done':''}"><input class="shopping-check" type="checkbox" ${x.done?'checked':''} data-shop-done="${esc(x.key)}" aria-label="Erledigt"><div class="shopping-name"><strong>${esc(x.article)}</strong><small>${isManualShoppingItem(x)?'Manuell hinzugefügt':`${sourceCount(x)} Rezept${sourceCount(x)===1?'':'e'}${x.note?` · ${esc(x.note)}`:''}`}</small></div><div class="shopping-amount">${esc(displayAmount(x))}</div><button class="shopping-remove" type="button" data-shop-remove="${esc(x.key)}" aria-label="Entfernen">×</button></div>`).join('')}</div>`:'<div class="shopping-empty">Zutaten lassen sich direkt aus einem Rezept übernehmen. Andere Dinge kannst du oben manuell hinzufügen.</div>'}</div></div>`;
   app.querySelectorAll('[data-shop-done]').forEach(x=>x.addEventListener('change',()=>toggleDone(x.dataset.shopDone)));
   app.querySelectorAll('[data-shop-remove]').forEach(x=>x.addEventListener('click',()=>removeShopping(x.dataset.shopRemove)));
+  document.getElementById('manualShoppingForm')?.addEventListener('submit',event=>{
+    event.preventDefault();
+    addManualShopping(document.getElementById('manualShoppingArticle')?.value,document.getElementById('manualShoppingAmount')?.value);
+  });
   document.getElementById('clearShopping')?.addEventListener('click',async()=>{shopping=[];updateCounts();syncShoppingControls();renderShopping();try{await persistStateSnapshot()}catch(error){console.warn('Einkaufsliste konnte nicht geleert werden.',error)}});
 }
 
