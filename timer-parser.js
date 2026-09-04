@@ -47,11 +47,25 @@ function unitSeconds(unit){
   return 0;
 }
 function actionLabel(text,start,end){
-  const after=text.slice(end,Math.min(text.length,end+90));
   const before=text.slice(Math.max(0,start-70),start);
-  for(const [re,label] of ACTIONS)if(re.test(after))return label;
-  for(const [re,label] of ACTIONS)if(re.test(before))return label;
-  if(/^\s*(?:nach|für|weitere?|nochmals?|noch)\b/i.test(text.slice(Math.max(0,start-10),end+10)))return 'Zeit im Schritt';
+  const after=text.slice(end,Math.min(text.length,end+90));
+  if(/\bnach\s+(?:ca\\.?\s*)?$/i.test(before))return 'Zwischenschritt';
+  let best=null;
+  for(const [re,label] of ACTIONS){
+    const index=after.search(re);
+    if(index>=0&&(!best||index<best.index))best={index,label};
+  }
+  if(best)return best.label;
+  let prior=null;
+  for(const [re,label] of ACTIONS){
+    const flags=re.flags.includes('g')?re.flags:re.flags+'g';
+    const scan=new RegExp(re.source,flags);
+    let match;while((match=scan.exec(before))){
+      if(!prior||match.index>prior.index)prior={index:match.index,label};
+      if(match[0]==='')scan.lastIndex++;
+    }
+  }
+  if(prior)return prior.label;
   return 'Timer';
 }
 function format(seconds){
