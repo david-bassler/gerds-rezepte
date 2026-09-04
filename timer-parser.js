@@ -29,7 +29,8 @@ const ACTIONS=[
 ];
 
 function numberValue(raw){
-  const value=String(raw||'').trim().replace(',','.');
+  if(raw===undefined||raw===null||String(raw).trim()==='')return null;
+  const value=String(raw).trim().replace(',','.');
   if(value==='¼')return .25;
   if(value==='½')return .5;
   if(value==='¾')return .75;
