@@ -42,16 +42,54 @@ function openRecipe(id){
   history.pushState({route:'detail',id,fromArchive:false},'',`#rezept=${encodeURIComponent(id)}`);
   location.reload();
 }
-function ensurePrintButton(){
+function shoppingMailBody(){
+  const rows=[...document.querySelectorAll('.shopping-list .shopping-row')];
+  const lines=rows.map(row=>{
+    const done=!!row.querySelector('[data-shop-done]')?.checked;
+    const article=row.querySelector('.shopping-name strong')?.textContent?.trim()||'';
+    const amount=row.querySelector('.shopping-amount')?.textContent?.trim()||'';
+    return `${done?'☑':'☐'} ${amount?amount+' ':''}${article}`.trim();
+  }).filter(Boolean);
+  return ['Einkaufsliste','',...lines,'','Gerds Rezepte'].join('\n');
+}
+function sendShoppingByMail(){
+  const value=window.prompt('An welche E-Mail-Adresse soll die Einkaufsliste gesendet werden?');
+  if(value===null)return;
+  const address=value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)){
+    window.alert('Bitte eine gültige E-Mail-Adresse eingeben.');
+    return;
+  }
+  const subject=encodeURIComponent('Gerds Einkaufsliste');
+  const body=encodeURIComponent(shoppingMailBody());
+  const link=document.createElement('a');
+  link.href=`mailto:${address}?subject=${subject}&body=${body}`;
+  link.hidden=true;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+function ensureActionButtons(){
   const actions=document.querySelector('.list-page .list-actions');
-  if(!actions||actions.querySelector('#printShopping'))return;
-  const button=document.createElement('button');
-  button.type='button';
-  button.id='printShopping';
-  button.className='shopping-print-button';
-  button.textContent='Drucken';
-  button.addEventListener('click',()=>window.print());
-  actions.prepend(button);
+  if(!actions)return;
+  if(!actions.querySelector('#mailShopping')){
+    const button=document.createElement('button');
+    button.type='button';
+    button.id='mailShopping';
+    button.className='shopping-mail-button';
+    button.textContent='Per E-Mail senden';
+    button.addEventListener('click',sendShoppingByMail);
+    actions.prepend(button);
+  }
+  if(!actions.querySelector('#printShopping')){
+    const button=document.createElement('button');
+    button.type='button';
+    button.id='printShopping';
+    button.className='shopping-print-button';
+    button.textContent='Drucken';
+    button.addEventListener('click',()=>window.print());
+    actions.prepend(button);
+  }
 }
 function sourceDetailsHtml(recipes,signature){
   const count=recipes.length;
@@ -75,7 +113,7 @@ async function refresh(){
   try{items=await getShopping()}catch(error){console.warn('Rezeptquellen der Einkaufsliste konnten nicht geladen werden.',error);return}
   if(token!==refreshToken||isDragging()||!isShoppingPage())return;
   const byKey=new Map(items.map(item=>[item.key,item]));
-  ensurePrintButton();
+  ensureActionButtons();
   list.querySelectorAll('.shopping-row').forEach(row=>{
     const key=row.querySelector('[data-shop-done]')?.dataset.shopDone;
     const name=row.querySelector('.shopping-name');
