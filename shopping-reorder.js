@@ -212,7 +212,8 @@ function nearestPreviousCategory(row){
 function decorateRows(list){
   directRows(list).forEach(row=>{
     ensureRowHandle(row);
-    const attached=nearestPreviousCategory(row)===rowCategory(row);
+    const category=rowCategory(row);
+    const attached=nearestPreviousCategory(row)===category;
     row.classList.toggle('shopping-is-loose',!attached);
     let badge=row.querySelector('.shopping-category-badge');
     if(!attached){
@@ -221,7 +222,8 @@ function decorateRows(list){
         badge.className='shopping-category-badge';
         row.querySelector('.shopping-name')?.appendChild(badge);
       }
-      if(badge)badge.textContent=CATEGORIES[rowCategory(row)]?.label||CATEGORIES.other.label;
+      const label=CATEGORIES[category]?.label||CATEGORIES.other.label;
+      if(badge&&badge.textContent!==label)badge.textContent=label;
     }else badge?.remove();
   });
 }
@@ -432,12 +434,24 @@ function pointerCancel(event){
   if(!drag||event.pointerId!==drag.pointerId)return;
   finishDrag(true);
 }
+function needsRebuild(list){
+  if(list.querySelector(':scope > .shopping-category-block'))return true;
+  const rows=allRows(list),direct=directRows(list);
+  if(rows.length!==direct.length)return true;
+  const categories=new Set(rows.map(rowCategory));
+  const headers=[...list.querySelectorAll(':scope > .shopping-category-header')];
+  if(headers.length!==categories.size)return true;
+  const headerCategories=new Set(headers.map(header=>header.dataset.category));
+  if([...categories].some(category=>!headerCategories.has(category)))return true;
+  return false;
+}
 function sync(){
   queued=false;
   if(isDragging()||isEditing())return;
   if(!isShoppingPage())return;
   const list=document.querySelector('.shopping-list');if(!list)return;
-  applySequence(list);
+  if(needsRebuild(list))applySequence(list);
+  else decorateRows(list);
   bindCategoryHandles(list);
 }
 function queueSync(){
