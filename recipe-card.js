@@ -19,8 +19,10 @@ const CARD_IMAGE_TREATMENT={
 
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const formatNumber=n=>new Intl.NumberFormat('de-DE',{maximumFractionDigits:2}).format(n);
+const isOne=n=>Math.abs(Number(n)-1)<1e-9;
+const portionLabel=n=>`${formatNumber(n)} ${isOne(n)?'Portion':'Portionen'}`;
 function fmtDuration(min){if(!Number.isFinite(min)||min<=0)return '—';if(min<60)return `${min} Min.`;const h=Math.floor(min/60),m=min%60;return m?`${h} Std. ${m} Min.`:`${h} Std.`}
-function baseLabel(r){if(r.scaleType==='batch')return `${formatNumber(r.baseScale)} kg Ansatz`;if(r.scaleType==='factor')return '1 × Rezept';return `${formatNumber(r.baseScale)} Portionen`}
+function baseLabel(r){if(r.scaleType==='batch')return `${formatNumber(r.baseScale)} kg Ansatz`;if(r.scaleType==='factor')return '1 × Rezept';return portionLabel(r.baseScale)}
 function initials(title){return String(title||'').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
 function cuisineVisual(cuisine,title){
   const idx=CUISINE_ICON_ORDER.indexOf(cuisine);
