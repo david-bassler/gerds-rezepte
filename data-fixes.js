@@ -36,7 +36,7 @@ function recipeReference(value){
 // Netto/Brutto/Abtropfgewicht sind keine Zustände, sondern eine Mengenbasis.
 const SIMPLE_PREPARATION_STATES=new Set([
   'zerlassen','geschmolzen','gekocht','gegart','blanchiert','geschalt','entkernt','entsteint',
-  'abgetropft','aufgetaut','puriert','zerdruckt','passiert','gehobelt'
+  'abgetropft','aufgetaut','puriert','zerdruckt','passiert','gehobelt','lauwarm'
 ]);
 function isPreparationState(value){
   const state=norm(value);
@@ -44,7 +44,30 @@ function isPreparationState(value){
   if(SIMPLE_PREPARATION_STATES.has(state))return true;
   if(/^(?:(?:sehr|extra) )?(?:(?:fein|grob) )?(?:gewurfelt|gehackt|gerieben|geschnitten|geschrotet)$/.test(state))return true;
   if(/^(?:frisch )?(?:(?:fein|grob) )?gerieben$/.test(state))return true;
-  return /^in .+ (?:wurfel|scheiben|ringe|streifen|stucke)$/.test(state);
+  return /^(?:in )?(?:(?:fein(?:e|en)?|grob(?:e|en)?|diagonal(?:e|en)?|halb(?:e|en)?|[0-9]+(?: [a-z]+)?) )?(?:wurfel|wurfeln|scheiben|ringe|streifen|stucke|spanen|halbmonde)$/.test(state);
+}
+// Manche Wörter beschreiben formal einen Zustand, sind hier aber Teil des
+// tatsächlich zu kaufenden Produkts und müssen deshalb am Produkt bleiben.
+function isPurchaseRelevantPreparation(product,value){
+  const p=` ${norm(product)} `,state=norm(value);
+  if(state==='gekocht'&&/(?: schinken | hinterschinken | schinkenstreifen )/.test(p))return true;
+  if((state==='gekocht'||state==='geschalt')&&p.includes(' maronen '))return true;
+  if(state==='geschalt'&&/(?: mandel|haselnuss|kurbiskern|sesam)/.test(p))return true;
+  if(state==='gehobelt'&&/(?: mandel|haselnuss)/.test(p))return true;
+  if(state==='entsteint'&&p.includes(' olive'))return true;
+  return false;
+}
+function splitPreparationPart(value,productContext){
+  const raw=String(value??'').trim();
+  if(!raw||/^alternativ\b/i.test(raw))return {product:raw,state:''};
+  if(isPreparationState(raw)&&!isPurchaseRelevantPreparation(productContext,raw))return {product:'',state:raw};
+  const words=raw.split(/\s+/);
+  for(let index=1;index<words.length;index++){
+    const product=words.slice(0,index).join(' ');
+    const state=words.slice(index).join(' ');
+    if(isPreparationState(state)&&!isPurchaseRelevantPreparation(productContext||product,state))return {product,state};
+  }
+  return {product:raw,state:''};
 }
 
 function extractQuantityBasis(value,ingredient){
@@ -98,6 +121,24 @@ function extractQuantityBasis(value,ingredient){
     return {text,basis};
   }
 
+  // Reine Abtropfgewichte und Angaben „ohne Fond“ sind ebenfalls Mengenbasen,
+  // keine Produktmerkmale. Explizite Packungsrelationen bleiben separat erhalten,
+  // weil die Rezeptmenge dort auch das Bruttogewicht bezeichnen kann.
+  match=text.match(/((?:,?\s*)Abtropfgewicht)\s*$/i);
+  if(match){
+    text=text.slice(0,match.index).trim().replace(/,\s*$/,'');
+    basis.recipe='drained';basis.purchase='drained';basis.purchaseKnown=false;
+    basis.displaySuffix=match[1].startsWith(',')?match[1]:` ${match[1].trimStart()}`;
+    return {text,basis};
+  }
+  match=text.match(/((?:,?\s*)ohne\s+Fond)\s*$/i);
+  if(match){
+    text=text.slice(0,match.index).trim().replace(/,\s*$/,'');
+    basis.recipe='drained';basis.purchase='drained';basis.purchaseKnown=false;
+    basis.displaySuffix=match[1].startsWith(',')?match[1]:` ${match[1].trimStart()}`;
+    return {text,basis};
+  }
+
   // Reine Nettoangaben bleiben ausdrücklich Nettoangaben. Die Einkaufsliste darf
   // dieselbe Zahl zeigen, markiert sie aber als Netto und als ggf. zu niedrig.
   match=text.match(/((?:,?\s*)netto)\s*$/i);
@@ -113,10 +154,14 @@ function extractQuantityBasis(value,ingredient){
 function splitIngredientArticle(value,ingredient){
   const label=String(value??'').trim();
   const extracted=extractQuantityBasis(label,ingredient);
-  const parts=extracted.text.split(',').map(part=>part.trim()).filter(Boolean);
-  const states=[];
-  while(parts.length>1&&isPreparationState(parts[parts.length-1]))states.unshift(parts.pop());
-  return {label,product:(parts.join(', ')||extracted.text||label),state:states.join(', '),quantityBasis:extracted.basis};
+  const rawParts=extracted.text.split(',').map(part=>part.trim()).filter(Boolean);
+  const productParts=[],states=[],productContext=rawParts[0]||extracted.text||label;
+  for(const part of rawParts){
+    const split=splitPreparationPart(part,productContext);
+    if(split.product)productParts.push(split.product);
+    if(split.state)states.push(split.state);
+  }
+  return {label,product:(productParts.join(', ')||extracted.text||label),state:states.join(', '),quantityBasis:extracted.basis};
 }
 function enrichIngredient(ingredient){
   if(!ingredient||typeof ingredient.article!=='string')return;
