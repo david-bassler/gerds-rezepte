@@ -1,8 +1,8 @@
 'use strict';
 
 const CACHE_PREFIX='gerds-rezepte-';
-const PRECACHE=`${CACHE_PREFIX}precache-v2`;
-const RUNTIME=`${CACHE_PREFIX}runtime-v2`;
+const PRECACHE=`${CACHE_PREFIX}precache-v3`;
+const RUNTIME=`${CACHE_PREFIX}runtime-v3`;
 
 const PRECACHE_URLS=[
   './',
@@ -17,6 +17,7 @@ const PRECACHE_URLS=[
   './shopping-focus.css',
   './pwa.css',
   './personal-data.css',
+  './cook-mode.css',
   './recipes-data.js',
   './data-fixes.js',
   './editorial-fixes.js',
@@ -30,6 +31,7 @@ const PRECACHE_URLS=[
   './vendor/sortable.min.js',
   './shopping-reorder.js',
   './shopping-focus.js',
+  './cook-mode.js',
   './personal-data.js',
   './pwa.js',
   './assets/images/logo-kitchen.svg',
