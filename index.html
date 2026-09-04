@@ -6,6 +6,11 @@
   <meta name="description" content="Gerds Rezepte – ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche mit Küchenwissen und dynamischer Mengenberechnung.">
   <meta name="theme-color" content="#29483a">
   <meta name="color-scheme" content="light">
+  <meta name="application-name" content="Gerds Rezepte">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gerds Rezepte">
   <link rel="canonical" href="https://david-bassler.github.io/gerds-rezepte/">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="de_DE">
@@ -20,6 +25,7 @@
   <meta name="twitter:image" content="https://david-bassler.github.io/gerds-rezepte/assets/images/hero-kitchen.webp">
   <title>Gerds Rezepte</title>
   <link rel="icon" href="assets/images/logo-kitchen.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
   <link rel="manifest" href="site.webmanifest">
   <link rel="preload" as="image" href="assets/images/hero-kitchen.webp">
   <link rel="stylesheet" href="styles.css">
@@ -28,6 +34,7 @@
   <link rel="stylesheet" href="shopping-ui.css">
   <link rel="stylesheet" href="shopping-reorder.css">
   <link rel="stylesheet" href="shopping-focus.css">
+  <link rel="stylesheet" href="pwa.css">
 </head>
 <body>
   <header class="topbar">
@@ -56,8 +63,9 @@
   <script>if(window.__gerdsInitialListHash){const route=window.__gerdsInitialListHash==='#favoriten'?'favorites':'shopping';history.replaceState({route},'',window.__gerdsInitialListHash);}</script>
   <script src="lists.js"></script>
   <script src="shopping-ui.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.7/Sortable.min.js" integrity="sha384-DgmC6Xe2bSN2WjTDXzWYbUbxyhNP+NNkGDR/g78pCXV7E7rcVTGxVg0uIVCUUcBc" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="vendor/sortable.min.js"></script>
   <script src="shopping-reorder.js"></script>
   <script src="shopping-focus.js"></script>
+  <script src="pwa.js"></script>
 </body>
 </html>
