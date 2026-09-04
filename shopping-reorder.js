@@ -6,7 +6,7 @@ const VERSION=2;
 const CATEGORY_PREFIX='category:';
 const ITEM_PREFIX='item:';
 const DEFAULT_CATEGORY_ORDER=[
-  'produce','bakery','meat','fish','dairy','chilled','pantry','canned','baking','spices','sauces','drinks','frozen','other'
+  'produce','bakery','meat','fish','dairy','chilled','pantry','canned','baking','spices','sauces','drinks','frozen','household','other'
 ];
 const CATEGORIES={
   produce:{label:'Obst & Gemüse'},
@@ -22,6 +22,7 @@ const CATEGORIES={
   sauces:{label:'Öle, Essig & Saucen'},
   drinks:{label:'Getränke'},
   frozen:{label:'Tiefkühl'},
+  household:{label:'Haushalt & Drogerie'},
   other:{label:'Sonstiges'}
 };
 
@@ -61,7 +62,8 @@ function categoryForArticle(value){
   if(has('mehl','zucker','puderzucker','vanillezucker','backpulver','natron','starke','speisestarke','kakao','schokolade','kuverture','gelatine','hefe','mandel','haselnuss','walnuss','pekannuss','pistazie','kokos','rosine','korinthe','marzipan','nougat','honig','sirup','sultanine','sauerteig','backmalz'))return 'baking';
   if(has('paprikapulver','curry','kurkuma','muskat','zimt','nelke','kardamom','kreuzkummel','koriandersaat','senfkorn','lorbeer','wacholder','safran','gewurz','chilipulver','cayenne','vanille','bruhwurfel','bruhe','fond','pfefferkorn','piment','maccis','meersalz')||word('salz')||word('pfeffer')||word('kummel'))return 'spices';
   if(has('champagner','prosecco','sherry','portwein','cognac','brandy','wodka','whisky','likor','mineralwasser','limonade','rotwein','weisswein')||word('wein')||word('bier')||word('sekt')||word('rum')||word('saft')||word('wasser')||word('cola'))return 'drinks';
-  if(has('nudel','pasta','spaghetti','tagliatelle','penne','makaroni','lasagne','risotto','couscous','bulgur','polenta','linsen','kichererbse','quinoa','haferflocke','gries','griess','paniermehl','semmelbrosel','pinienkern','sesam','cornflakes','ravioli','langkornreis')||word('reis'))return 'pantry';
+  if(has('nudel','pasta','spaghetti','tagliatelle','penne','makaroni','lasagne','risotto','couscous','bulgur','polenta','linsen','kichererbse','quinoa','haferflocke','gries','griess','paniermehl','semmelbrosel','pinienkern','sesam','cornflakes','ravioli','langkornreis','kaffee','espresso','tee','musli','muesli')||word('reis'))return 'pantry';
+  if(has('spulmittel','spuelmittel','reiniger','seife','shampoo','duschgel','zahncreme','zahnpasta','toilettenpapier','kuchenrolle','kuechenrolle','mullbeutel','muellbeutel','aluminiumfolie','frischhaltefolie','backpapier','schwamm','serviette','taschentuch'))return 'household';
   return 'other';
 }
 
