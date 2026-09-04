@@ -46,20 +46,23 @@ function shoppingMailBody(){
   const list=document.querySelector('.shopping-list');
   if(!list)return ['Einkaufsliste','','Gerds Rezepte'].join('\n');
   const lines=[];
-  for(const child of [...list.children]){
-    if(child.classList.contains('shopping-category-header')){
-      const label=child.querySelector('strong')?.textContent?.trim();
-      if(label){if(lines.length&&lines[lines.length-1]!=='')lines.push('');lines.push(label)}
-      continue;
-    }
-    if(!child.classList.contains('shopping-row'))continue;
-    const done=!!child.querySelector('[data-shop-done]')?.checked;
-    const article=child.querySelector('.shopping-inline-article')?.value?.trim()||child.querySelector('.shopping-name strong')?.textContent?.trim()||'';
-    const amount=child.querySelector('.shopping-inline-amount')?.value?.trim()||child.querySelector('.shopping-amount')?.textContent?.trim()||'';
-    const loose=child.querySelector('.shopping-category-badge')?.textContent?.trim();
+  const appendRow=row=>{
+    const done=!!row.querySelector('[data-shop-done]')?.checked;
+    const article=row.querySelector('.shopping-inline-article')?.value?.trim()||row.querySelector('.shopping-name strong')?.textContent?.trim()||'';
+    const amount=row.querySelector('.shopping-inline-amount')?.value?.trim()||row.querySelector('.shopping-amount')?.textContent?.trim()||'';
+    const loose=row.querySelector('.shopping-category-badge')?.textContent?.trim();
     const suffix=loose?` [${loose}]`:'';
     const line=`${done?'☑':'☐'} ${amount?amount+' ':''}${article}${suffix}`.trim();
     if(line)lines.push(line);
+  };
+  for(const child of [...list.children]){
+    if(child.classList.contains('shopping-category-block')){
+      const label=child.querySelector(':scope > .shopping-category-header strong')?.textContent?.trim();
+      if(label){if(lines.length&&lines[lines.length-1]!=='')lines.push('');lines.push(label)}
+      child.querySelectorAll(':scope > .shopping-category-items > .shopping-row').forEach(appendRow);
+      continue;
+    }
+    if(child.classList.contains('shopping-row'))appendRow(child);
   }
   return ['Einkaufsliste','',...lines,'','Gerds Rezepte'].join('\n');
 }
