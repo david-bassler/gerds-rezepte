@@ -359,7 +359,7 @@ function initSortables(list){
     scrollSensitivity:64,
     scrollSpeed:12,
     onStart:dragStart,
-    onAdd:event=>{event.item.classList.add('shopping-is-loose');dragEnd(list)},
+    onAdd:event=>{event.item.classList.add('shopping-is-loose')},
     onEnd:()=>dragEnd(list)
   });
 
@@ -381,8 +381,6 @@ function initSortables(list){
       scrollSensitivity:64,
       scrollSpeed:12,
       onStart:dragStart,
-      onAdd:()=>dragEnd(list),
-      onRemove:()=>dragEnd(list),
       onEnd:()=>dragEnd(list)
     });
     itemSortables.push(instance);
