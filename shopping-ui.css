@@ -6,7 +6,7 @@
   body[data-route="shopping"] .list-page{padding:0!important}
   body[data-route="shopping"] .list-page .shell{max-width:none!important;width:auto!important;padding:0!important;margin:0!important}
   body[data-route="shopping"] .list-head{display:block!important;margin:0 0 5mm!important}
-  body[data-route="shopping"] .list-head .category,body[data-route="shopping"] .list-head p,body[data-route="shopping"] .list-actions,body[data-route="shopping"] .shopping-manual-form,body[data-route="shopping"] .shopping-note,body[data-route="shopping"] .shopping-check,body[data-route="shopping"] .shopping-remove,body[data-route="shopping"] .shopping-sources{display:none!important}
+  body[data-route="shopping"] .list-head .category,body[data-route="shopping"] .list-head p,body[data-route="shopping"] .list-actions,body[data-route="shopping"] .shopping-manual-form,body[data-route="shopping"] .shopping-note,body[data-route="shopping"] .shopping-check,body[data-route="shopping"] .shopping-edit,body[data-route="shopping"] .shopping-inline-edit,body[data-route="shopping"] .shopping-remove,body[data-route="shopping"] .shopping-sources{display:none!important}
   body[data-route="shopping"] .list-head h1{margin:0!important;font-size:20pt!important;line-height:1.1!important;color:#000!important}
   body[data-route="shopping"] .shopping-list{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;column-gap:8mm!important;row-gap:0!important}
   body[data-route="shopping"] .shopping-row{display:grid!important;grid-template-columns:14px minmax(0,1fr) auto!important;gap:4px 6px!important;align-items:baseline!important;padding:3px 0!important;border:0!important;border-bottom:1px solid #bbb!important;border-radius:0!important;background:transparent!important;break-inside:avoid!important;page-break-inside:avoid!important;color:#000!important}
@@ -16,4 +16,23 @@
   body[data-route="shopping"] .shopping-name strong{font-size:10pt!important;line-height:1.15!important;color:#000!important}
   body[data-route="shopping"] .shopping-name small{font-size:7.5pt!important;line-height:1.15!important;color:#444!important;margin-top:1px!important}
   body[data-route="shopping"] .shopping-amount{grid-column:3!important;font-size:9.5pt!important;line-height:1.15!important;text-align:right!important;color:#000!important;white-space:nowrap!important}
+}
+.shopping-row.is-manual{grid-template-columns:auto minmax(0,1fr) auto auto auto}
+.shopping-editable{cursor:pointer}
+.shopping-row.is-manual .shopping-editable:hover strong,.shopping-row.is-manual .shopping-editable:hover.shopping-amount{text-decoration:underline;text-underline-offset:3px}
+.shopping-edit{border:1px solid rgba(41,72,58,.2);background:#fff;color:#29483a;border-radius:999px;width:31px;height:31px;padding:0;display:grid;place-items:center;font-size:16px;line-height:1;cursor:pointer}
+.shopping-row.is-editing{grid-template-columns:auto minmax(0,1fr)}
+.shopping-inline-edit{grid-column:2/-1;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(110px,.7fr) auto;gap:8px;align-items:center}
+.shopping-inline-edit input{min-width:0;border:1px solid rgba(41,72,58,.22);background:#fff;color:#20382e;border-radius:999px;padding:9px 12px;font:inherit}
+.shopping-inline-edit input:focus{outline:2px solid rgba(41,72,58,.2);outline-offset:1px}
+.shopping-inline-actions{display:flex;gap:6px}
+.shopping-inline-actions button{border:1px solid rgba(41,72,58,.2);background:#fff;color:#29483a;border-radius:999px;padding:8px 11px;font:inherit;font-size:12px;font-weight:750;cursor:pointer}
+.shopping-inline-actions button[type="submit"]{background:#29483a;color:#fff;border-color:#29483a}
+@media(max-width:680px){
+  .shopping-row.is-manual{grid-template-columns:auto minmax(0,1fr) auto auto}
+  .shopping-row.is-manual .shopping-amount{grid-column:2;text-align:left}
+  .shopping-row.is-manual .shopping-edit{grid-column:3;grid-row:1/3}
+  .shopping-row.is-manual .shopping-remove{grid-column:4;grid-row:1/3}
+  .shopping-inline-edit{grid-template-columns:1fr}
+  .shopping-inline-actions{justify-content:flex-start}
 }
