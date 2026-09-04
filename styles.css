@@ -73,12 +73,12 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
 .hero-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:28px;color:#5e655f;font:500 16px/1.4 Georgia,serif}
 .hero-meta strong{font-weight:600;color:#444d46}
 .hero-art{position:absolute;z-index:1;top:0;right:0;bottom:0;width:61%;background-image:url("assets/images/hero-kitchen.webp");background-repeat:no-repeat;background-position:right center;background-size:auto 100%;pointer-events:none}
-.hero-art:after{content:"";position:absolute;top:0;right:0;bottom:0;width:min(680px,100%);background:linear-gradient(to right,#fbf8f1 0,rgba(251,248,241,.96) 8%,rgba(251,248,241,.72) 20%,rgba(251,248,241,.28) 36%,rgba(251,248,241,0) 56%);pointer-events:none}
+.hero-art:after{content:"";position:absolute;top:0;right:0;bottom:0;width:min(570px,100%);background:linear-gradient(to right,#fbf8f1 0,rgba(251,248,241,.96) 11%,rgba(251,248,241,.72) 27%,rgba(251,248,241,.28) 47%,rgba(251,248,241,0) 68%);pointer-events:none}
 @media(max-width:1100px){
   .hero-panel{min-height:324px;padding-top:54px;padding-bottom:50px}
   .hero-copy{width:min(610px,54vw)}
   .hero-art{width:58%;background-size:auto 96%}
-  .hero-art:after{width:min(600px,100%)}
+  .hero-art:after{width:min(520px,100%)}
   .hero h1{font-size:clamp(48px,6vw,68px)}
   .hero-tagline{font-size:clamp(19px,2.2vw,25px)!important}
 }
