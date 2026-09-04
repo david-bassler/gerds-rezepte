@@ -5,11 +5,12 @@ const RecipeCard=window.GerdRecipeCard;
 if(!DATA||!RecipeCard)return;
 
 const DB_NAME='gerds-rezepte';
-const DB_VERSION=3;
+const DB_VERSION=4;
 const FAVORITES='favorites';
 const SHOPPING='shopping';
 const PLANS='recipePlans';
 const NOTES='recipeNotes';
+const TIMERS='timers';
 let dbPromise=null;
 let favorites=new Set();
 let shopping=[];
@@ -36,6 +37,7 @@ function openDb(){
       if(!db.objectStoreNames.contains(SHOPPING))db.createObjectStore(SHOPPING,{keyPath:'key'});
       if(!db.objectStoreNames.contains(PLANS))db.createObjectStore(PLANS,{keyPath:'recipeId'});
       if(!db.objectStoreNames.contains(NOTES))db.createObjectStore(NOTES,{keyPath:'recipeId'});
+      if(!db.objectStoreNames.contains(TIMERS))db.createObjectStore(TIMERS,{keyPath:'id'});
     };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
