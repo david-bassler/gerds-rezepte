@@ -3,8 +3,8 @@
 
 const DB_NAME='gerds-rezepte';
 const FORMAT='gerds-rezepte-backup';
-const BACKUP_VERSION=1;
-const STORES=['favorites','shopping','recipePlans','recipeNotes'];
+const BACKUP_VERSION=2;
+const STORES=['favorites','shopping','recipePlans','recipeNotes','timers'];
 const STORAGE_KEYS=['gerds-shopping-order-v1'];
 let dbPromise=null;
 
@@ -53,12 +53,13 @@ function counts(data){
     favorites:Array.isArray(stores.favorites)?stores.favorites.length:0,
     shopping:Array.isArray(stores.shopping)?stores.shopping.length:0,
     notes:Array.isArray(stores.recipeNotes)?stores.recipeNotes.length:0,
-    plans:Array.isArray(stores.recipePlans)?stores.recipePlans.length:0
+    plans:Array.isArray(stores.recipePlans)?stores.recipePlans.length:0,
+    timers:Array.isArray(stores.timers)?stores.timers.length:0
   };
 }
 function summaryText(data){
   const c=counts(data);
-  return `${c.favorites} Favorit${c.favorites===1?'':'en'} · ${c.shopping} Einkaufsartikel · ${c.notes} Notiz${c.notes===1?'':'en'}`;
+  return `${c.favorites} Favorit${c.favorites===1?'':'en'} · ${c.shopping} Einkaufsartikel · ${c.notes} Notiz${c.notes===1?'':'en'} · ${c.timers} Timer`;
 }
 function validateBackup(data){
   if(!data||typeof data!=='object'||data.format!==FORMAT)throw new Error('Die Datei ist keine Sicherung von Gerds Rezepte.');
