@@ -187,6 +187,9 @@ function render(){
   const mode=document.querySelector('.cook-mode');
   const step=state.steps[state.index];
   if(!mode||!step)return;
+  const titleKicker=mode.querySelector('.cook-mode-title > span');
+  const title=mode.querySelector('.cook-mode-title > strong');
+  const ingredientsBody=mode.querySelector('.cook-ingredients-body');
   const phase=mode.querySelector('[data-cook-phase]');
   const source=mode.querySelector('[data-cook-source]');
   const number=mode.querySelector('[data-cook-number]');
@@ -195,6 +198,12 @@ function render(){
   const progress=mode.querySelector('[data-cook-progress]');
   const prev=mode.querySelector('[data-cook-prev]');
   const next=mode.querySelector('[data-cook-next]');
+  if(titleKicker)titleKicker.textContent=state.scope==='all'?'Kochmodus':'Unterrezept · Kochmodus';
+  if(title)title.textContent=state.title||state.recipe.title;
+  if(ingredientsBody&&ingredientsBody.dataset.scope!==state.scope){
+    ingredientsBody.innerHTML=ingredientHtml(state.ingredients);
+    ingredientsBody.dataset.scope=state.scope;
+  }
   phase.textContent=step.label;
   source.textContent=step.source||state.recipe.title;
   source.hidden=!step.source;
@@ -280,7 +289,7 @@ function enter({stepIndex=0,scope='all'}={}){
     <div class="cook-ingredients-backdrop"></div>
     <aside class="cook-ingredients" aria-hidden="true">
       <div class="cook-ingredients-head"><div><span>Zutaten</span><strong>Aktuell skalierte Mengen</strong></div><button type="button" data-cook-ingredients-close aria-label="Zutaten schließen">×</button></div>
-      <div class="cook-ingredients-body">${ingredientHtml(ingredients)}</div>
+      <div class="cook-ingredients-body" data-scope="${esc(scope)}">${ingredientHtml(ingredients)}</div>
     </aside>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-cook-close]').addEventListener('click',leave);
