@@ -471,6 +471,46 @@ async function addManualShopping(article,amount){
   try{await persistStateSnapshot()}
   catch(error){shopping=before;updateCounts();if(currentListRoute()==='shopping')renderShopping();console.warn('Manueller Einkaufsartikel konnte nicht gespeichert werden.',error)}
 }
+async function editManualShopping(key,article,amount){
+  const name=String(article||'').trim(),manualAmount=String(amount||'').trim();
+  if(!name)return false;
+  const item=shopping.find(x=>x.key===key);
+  if(!isManualShoppingItem(item))return false;
+  const before=shopping;
+  shopping=shopping.map(x=>x.key===key?normalizeManualShoppingItem({...x,article:name,manualAmount,updatedAt:Date.now()}):x);
+  if(currentListRoute()==='shopping')renderShopping();
+  try{await persistStateSnapshot();return true}
+  catch(error){
+    shopping=before;
+    if(currentListRoute()==='shopping')renderShopping();
+    console.warn('Manueller Einkaufsartikel konnte nicht geändert werden.',error);
+    return false;
+  }
+}
+function startManualShoppingEdit(key){
+  const item=shopping.find(x=>x.key===key);
+  if(!isManualShoppingItem(item))return;
+  const row=[...document.querySelectorAll('.shopping-row')].find(x=>x.dataset.shoppingKey===key);
+  if(!row||row.classList.contains('is-editing'))return;
+  row.classList.add('is-editing');
+  row.innerHTML=`<input class="shopping-check" type="checkbox" ${item.done?'checked':''} disabled aria-label="Erledigt"><form class="shopping-inline-edit"><input type="text" class="shopping-inline-article" maxlength="120" autocomplete="off" aria-label="Artikel" value="${esc(item.article)}" required><input type="text" class="shopping-inline-amount" maxlength="80" autocomplete="off" aria-label="Menge, optional" value="${esc(item.manualAmount||'')}" placeholder="Menge (optional)"><div class="shopping-inline-actions"><button type="submit">Speichern</button><button type="button" data-shop-edit-cancel>Abbrechen</button></div></form>`;
+  const form=row.querySelector('.shopping-inline-edit');
+  const articleInput=row.querySelector('.shopping-inline-article');
+  const amountInput=row.querySelector('.shopping-inline-amount');
+  articleInput?.focus();
+  articleInput?.select();
+  form?.addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(!articleInput?.value.trim()){articleInput?.focus();return}
+    [...form.elements].forEach(el=>{if('disabled' in el)el.disabled=true});
+    const ok=await editManualShopping(key,articleInput.value,amountInput?.value);
+    if(!ok&&articleInput?.isConnected)[...form.elements].forEach(el=>{if('disabled' in el)el.disabled=false});
+  });
+  row.querySelector('[data-shop-edit-cancel]')?.addEventListener('click',()=>renderShopping());
+  form?.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){event.preventDefault();renderShopping()}
+  });
+}
 async function removeShopping(key){
   const before=shopping;shopping=shopping.filter(x=>x.key!==key);
   updateCounts();syncShoppingControls();if(currentListRoute()==='shopping')renderShopping();
@@ -503,9 +543,19 @@ function renderFavorites(){
 function renderShopping(){
   const app=document.getElementById('app'),rows=[...shopping].sort((a,b)=>Number(a.done)-Number(b.done)||a.article.localeCompare(b.article,'de'));
   const manualForm='<form class="shopping-manual-form" id="manualShoppingForm"><input type="text" id="manualShoppingArticle" maxlength="120" autocomplete="off" aria-label="Artikel" placeholder="Artikel hinzufügen" required><input type="text" id="manualShoppingAmount" maxlength="80" autocomplete="off" aria-label="Menge, optional" placeholder="Menge (optional)"><button type="submit">Hinzufügen</button></form>';
-  app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Einkaufsliste</h1><p>${rows.length?`${rows.length} Einkaufsartikel`:'Noch keine Artikel hinzugefügt.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearShopping">Liste leeren</button></div>':''}</div>${manualForm}${rows.length?`<div class="shopping-list">${rows.map(x=>`<div class="shopping-row ${x.done?'is-done':''}"><input class="shopping-check" type="checkbox" ${x.done?'checked':''} data-shop-done="${esc(x.key)}" aria-label="Erledigt"><div class="shopping-name"><strong>${esc(x.article)}</strong><small>${isManualShoppingItem(x)?'Manuell hinzugefügt':`${sourceCount(x)} Rezept${sourceCount(x)===1?'':'e'}${x.note?` · ${esc(x.note)}`:''}`}</small></div><div class="shopping-amount">${esc(displayAmount(x))}</div><button class="shopping-remove" type="button" data-shop-remove="${esc(x.key)}" aria-label="Entfernen">×</button></div>`).join('')}</div>`:'<div class="shopping-empty">Zutaten lassen sich direkt aus einem Rezept übernehmen. Andere Dinge kannst du oben manuell hinzufügen.</div>'}</div></div>`;
+  const rowHtml=x=>{
+    const manual=isManualShoppingItem(x);
+    const editAttrs=manual?` data-shop-edit="${esc(x.key)}" title="Bearbeiten"`:'';
+    const meta=manual?'Manuell hinzugefügt · bearbeiten':`${sourceCount(x)} Rezept${sourceCount(x)===1?'':'e'}${x.note?` · ${esc(x.note)}`:''}`;
+    return `<div class="shopping-row ${x.done?'is-done':''} ${manual?'is-manual':''}" data-shopping-key="${esc(x.key)}"><input class="shopping-check" type="checkbox" ${x.done?'checked':''} data-shop-done="${esc(x.key)}" aria-label="Erledigt"><div class="shopping-name${manual?' shopping-editable':''}"${editAttrs}><strong>${esc(x.article)}</strong><small>${meta}</small></div><div class="shopping-amount${manual?' shopping-editable':''}"${editAttrs}>${esc(displayAmount(x))}</div>${manual?`<button class="shopping-edit" type="button" data-shop-edit="${esc(x.key)}" aria-label="Bearbeiten" title="Bearbeiten">✎</button>`:''}<button class="shopping-remove" type="button" data-shop-remove="${esc(x.key)}" aria-label="Entfernen">×</button></div>`;
+  };
+  app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Einkaufsliste</h1><p>${rows.length?`${rows.length} Einkaufsartikel`:'Noch keine Artikel hinzugefügt.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearShopping">Liste leeren</button></div>':''}</div>${manualForm}${rows.length?`<div class="shopping-list">${rows.map(rowHtml).join('')}</div>`:'<div class="shopping-empty">Zutaten lassen sich direkt aus einem Rezept übernehmen. Andere Dinge kannst du oben manuell hinzufügen.</div>'}</div></div>`;
   app.querySelectorAll('[data-shop-done]').forEach(x=>x.addEventListener('change',()=>toggleDone(x.dataset.shopDone)));
   app.querySelectorAll('[data-shop-remove]').forEach(x=>x.addEventListener('click',()=>removeShopping(x.dataset.shopRemove)));
+  app.querySelectorAll('[data-shop-edit]').forEach(x=>x.addEventListener('click',event=>{
+    event.stopPropagation();
+    startManualShoppingEdit(x.dataset.shopEdit);
+  }));
   document.getElementById('manualShoppingForm')?.addEventListener('submit',event=>{
     event.preventDefault();
     addManualShopping(document.getElementById('manualShoppingArticle')?.value,document.getElementById('manualShoppingAmount')?.value);
