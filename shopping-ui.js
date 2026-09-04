@@ -69,18 +69,47 @@ function sendShoppingByMail(){
   link.click();
   link.remove();
 }
+async function shareShopping(){
+  const data={title:'Gerds Einkaufsliste',text:shoppingMailBody()};
+  if(typeof navigator.share!=='function'){sendShoppingByMail();return}
+  try{
+    await navigator.share(data);
+  }catch(error){
+    if(error?.name==='AbortError')return;
+    console.warn('Teilen der Einkaufsliste fehlgeschlagen; E-Mail-Fallback wird verwendet.',error);
+    sendShoppingByMail();
+  }
+}
+async function copyShopping(){
+  const text=shoppingMailBody();
+  try{
+    if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);
+    else{
+      const area=document.createElement('textarea');
+      area.value=text;
+      area.setAttribute('readonly','');
+      area.style.position='fixed';
+      area.style.opacity='0';
+      document.body.appendChild(area);
+      area.select();
+      if(!document.execCommand('copy'))throw new Error('copy command failed');
+      area.remove();
+    }
+    const button=document.getElementById('copyShopping');
+    if(button){
+      const previous=button.textContent;
+      button.textContent='Kopiert';
+      window.setTimeout(()=>{if(button.isConnected)button.textContent=previous},1400);
+    }
+  }catch(error){
+    console.warn('Einkaufsliste konnte nicht kopiert werden.',error);
+    window.alert('Die Einkaufsliste konnte nicht in die Zwischenablage kopiert werden.');
+  }
+}
 function ensureActionButtons(){
   const actions=document.querySelector('.list-page .list-actions');
   if(!actions)return;
-  if(!actions.querySelector('#mailShopping')){
-    const button=document.createElement('button');
-    button.type='button';
-    button.id='mailShopping';
-    button.className='shopping-mail-button';
-    button.textContent='Per E-Mail senden';
-    button.addEventListener('click',sendShoppingByMail);
-    actions.prepend(button);
-  }
+  actions.querySelector('#mailShopping')?.remove();
   if(!actions.querySelector('#printShopping')){
     const button=document.createElement('button');
     button.type='button';
@@ -88,6 +117,25 @@ function ensureActionButtons(){
     button.className='shopping-print-button';
     button.textContent='Drucken';
     button.addEventListener('click',()=>window.print());
+    actions.prepend(button);
+  }
+  if(!actions.querySelector('#copyShopping')){
+    const button=document.createElement('button');
+    button.type='button';
+    button.id='copyShopping';
+    button.className='shopping-copy-button';
+    button.textContent='Kopieren';
+    button.addEventListener('click',copyShopping);
+    actions.prepend(button);
+  }
+  if(!actions.querySelector('#shareShopping')){
+    const button=document.createElement('button');
+    button.type='button';
+    button.id='shareShopping';
+    button.className='shopping-share-button';
+    button.textContent='Teilen';
+    button.title=typeof navigator.share==='function'?'Einkaufsliste teilen':'Einkaufsliste per E-Mail senden';
+    button.addEventListener('click',shareShopping);
     actions.prepend(button);
   }
 }
