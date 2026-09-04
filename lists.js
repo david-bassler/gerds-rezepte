@@ -5,17 +5,22 @@ const RecipeCard=window.GerdRecipeCard;
 if(!DATA||!RecipeCard)return;
 
 const DB_NAME='gerds-rezepte';
-const DB_VERSION=2;
+const DB_VERSION=3;
 const FAVORITES='favorites';
 const SHOPPING='shopping';
 const PLANS='recipePlans';
+const NOTES='recipeNotes';
 let dbPromise=null;
 let favorites=new Set();
 let shopping=[];
 let plans=new Map();
+let recipeNotes=new Map();
 let plansReady=false;
+let notesReady=false;
 let persistTimer=null;
 let persistChain=Promise.resolve();
+const noteSaveTimers=new Map();
+let notePersistChain=Promise.resolve();
 
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,' ').trim();
@@ -30,6 +35,7 @@ function openDb(){
       if(!db.objectStoreNames.contains(FAVORITES))db.createObjectStore(FAVORITES,{keyPath:'recipeId'});
       if(!db.objectStoreNames.contains(SHOPPING))db.createObjectStore(SHOPPING,{keyPath:'key'});
       if(!db.objectStoreNames.contains(PLANS))db.createObjectStore(PLANS,{keyPath:'recipeId'});
+      if(!db.objectStoreNames.contains(NOTES))db.createObjectStore(NOTES,{keyPath:'recipeId'});
     };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
@@ -354,6 +360,68 @@ async function toggleFavorite(id){
   if(currentListRoute()==='favorites')renderFavorites();
 }
 
+function noteText(recipeId){return String(recipeNotes.get(recipeId)?.text||'')}
+function setLocalRecipeNote(recipeId,text){
+  const value=String(text??'').replace(/\r\n?/g,'\n');
+  if(value.trim())recipeNotes.set(recipeId,{recipeId,text:value,updatedAt:Date.now()});
+  else recipeNotes.delete(recipeId);
+  return value;
+}
+function persistRecipeNote(recipeId,text){
+  const value=setLocalRecipeNote(recipeId,text);
+  const task=notePersistChain.then(()=>value.trim()
+    ?put(NOTES,{recipeId,text:value,updatedAt:Date.now()})
+    :del(NOTES,recipeId));
+  notePersistChain=task.catch(()=>{});
+  return task;
+}
+function queueRecipeNoteSave(recipeId,text,status,{immediate=false}={}){
+  const value=setLocalRecipeNote(recipeId,text);
+  const pending=noteSaveTimers.get(recipeId);
+  if(pending)clearTimeout(pending);
+  noteSaveTimers.delete(recipeId);
+  if(status)status.textContent=value.trim()?'Speichert …':'Entfernt …';
+  const save=()=>{
+    noteSaveTimers.delete(recipeId);
+    return persistRecipeNote(recipeId,value).then(()=>{
+      if(status?.isConnected&&document.querySelector('[data-recipe-note-text]')?.value===value)status.textContent=value.trim()?'Gespeichert':'Keine Notiz gespeichert';
+    }).catch(error=>{
+      if(status?.isConnected)status.textContent='Speichern fehlgeschlagen';
+      console.warn('Persönliche Notiz konnte nicht gespeichert werden.',error);
+    });
+  };
+  if(immediate)save();else noteSaveTimers.set(recipeId,setTimeout(save,450));
+}
+function decorateRecipeNote(recipe){
+  if(!notesReady)return;
+  const hero=document.querySelector('.detail-hero');
+  if(!hero||document.querySelector('[data-recipe-note]'))return;
+  const value=noteText(recipe.id),hasNote=!!value.trim();
+  hero.insertAdjacentHTML('afterend',`<details class="personal-note${hasNote?' has-note':''}" data-recipe-note="${esc(recipe.id)}" ${hasNote?'open':''}><summary><span>Persönliche Notiz</span><small>${hasNote?'Notiz vorhanden':'Nur auf diesem Gerät'}</small></summary><div class="personal-note-body"><textarea data-recipe-note-text rows="4" maxlength="5000" placeholder="Zum Beispiel: nächstes Mal weniger Salz, länger im Ofen …">${esc(value)}</textarea><div class="personal-note-footer"><span data-recipe-note-status>${hasNote?'Gespeichert':'Wird nur auf diesem Gerät gespeichert'}</span><button type="button" data-recipe-note-clear ${hasNote?'':'hidden'}>Notiz löschen</button></div><div class="personal-note-print" aria-hidden="true"></div></div></details>`);
+  const card=document.querySelector('[data-recipe-note]'),textarea=card?.querySelector('[data-recipe-note-text]'),status=card?.querySelector('[data-recipe-note-status]'),clearButton=card?.querySelector('[data-recipe-note-clear]'),print=card?.querySelector('.personal-note-print');
+  if(!card||!textarea)return;
+  const syncVisuals=()=>{
+    const text=textarea.value,filled=!!text.trim();
+    card.classList.toggle('has-note',filled);
+    if(clearButton)clearButton.hidden=!filled;
+    const summaryState=card.querySelector('summary small');
+    if(summaryState)summaryState.textContent=filled?'Notiz vorhanden':'Nur auf diesem Gerät';
+    if(print)print.textContent=text;
+  };
+  syncVisuals();
+  textarea.addEventListener('input',()=>{
+    syncVisuals();
+    queueRecipeNoteSave(recipe.id,textarea.value,status);
+  });
+  textarea.addEventListener('blur',()=>queueRecipeNoteSave(recipe.id,textarea.value,status,{immediate:true}));
+  clearButton?.addEventListener('click',()=>{
+    if(!window.confirm('Persönliche Notiz zu diesem Rezept löschen?'))return;
+    textarea.value='';
+    syncVisuals();
+    queueRecipeNoteSave(recipe.id,'',status,{immediate:true});
+    textarea.focus();
+  });
+}
 function currentRecipe(){const m=(location.hash||'').match(/^#rezept=(.+)$/);return m?recipeById(decodeURIComponent(m[1])):null}
 function currentTarget(r){const input=document.getElementById('portionInput');const v=Number(input?.value);return Number.isFinite(v)?v:plannedTarget(r)}
 function hasShoppingContribution(id){return shopping.some(item=>(item.contributions||[]).some(c=>c.id===id))}
@@ -468,6 +536,7 @@ function decorateDetail(){
   const hero=document.querySelector('.detail-hero > div');
   if(hero){let button=hero.querySelector('.detail-favorite');if(!button){hero.querySelector('.detail-meta')?.insertAdjacentHTML('afterend',`<button type="button" class="detail-favorite" data-detail-favorite="${esc(r.id)}"></button>`);button=hero.querySelector('.detail-favorite')}if(button){syncDetailFavoriteButton(button,r.id);if(!button.dataset.favoriteBound){button.dataset.favoriteBound='1';button.addEventListener('click',()=>toggleFavorite(r.id))}}}
   bindRecipePlanControls(r);
+  decorateRecipeNote(r);
   decorateIngredients(r);
 }
 function decorateIngredients(r){
@@ -497,12 +566,14 @@ window.addEventListener('popstate',()=>setTimeout(()=>{const route=currentListRo
 
 (async()=>{
   try{
-    const [favoriteRows,planRows,shoppingRows]=await Promise.all([getAll(FAVORITES),getAll(PLANS),getAll(SHOPPING)]);
+    const [favoriteRows,planRows,shoppingRows,noteRows]=await Promise.all([getAll(FAVORITES),getAll(PLANS),getAll(SHOPPING),getAll(NOTES)]);
     favorites=new Set(favoriteRows.map(x=>x.recipeId));
     plans=new Map(planRows.filter(x=>x?.recipeId&&Number.isFinite(Number(x.target))).map(x=>[x.recipeId,{...x,target:Number(x.target)}]));
+    recipeNotes=new Map(noteRows.filter(x=>x?.recipeId&&typeof x.text==='string'&&x.text.trim()).map(x=>[x.recipeId,x]));
     shopping=await migrateShopping(shoppingRows);
   }catch(e){console.warn('Listen konnten nicht aus IndexedDB geladen werden.',e)}
   plansReady=true;
+  notesReady=true;
   ensureNav();updateCounts();const route=currentListRoute();if(route)showList(route,{write:false});else decorate();
 })();
 })();
