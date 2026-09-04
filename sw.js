@@ -1,8 +1,8 @@
 'use strict';
 
 const CACHE_PREFIX='gerds-rezepte-';
-const PRECACHE=`${CACHE_PREFIX}precache-v4`;
-const RUNTIME=`${CACHE_PREFIX}runtime-v4`;
+const PRECACHE=`${CACHE_PREFIX}precache-v5`;
+const RUNTIME=`${CACHE_PREFIX}runtime-v5`;
 
 const PRECACHE_URLS=[
   './','./index.html','./404.html','./site.webmanifest',
@@ -12,49 +12,9 @@ const PRECACHE_URLS=[
 ];
 
 self.addEventListener('install',event=>{event.waitUntil(caches.open(PRECACHE).then(cache=>cache.addAll(PRECACHE_URLS)))});
-self.addEventListener('activate',event=>{
-  event.waitUntil((async()=>{
-    const names=await caches.keys();
-    await Promise.all(names.filter(name=>name.startsWith(CACHE_PREFIX)&&name!==PRECACHE&&name!==RUNTIME).map(name=>caches.delete(name)));
-    if(self.registration.navigationPreload)await self.registration.navigationPreload.enable();
-    await self.clients.claim();
-  })());
-});
+self.addEventListener('activate',event=>{event.waitUntil((async()=>{const names=await caches.keys();await Promise.all(names.filter(name=>name.startsWith(CACHE_PREFIX)&&name!==PRECACHE&&name!==RUNTIME).map(name=>caches.delete(name)));if(self.registration.navigationPreload)await self.registration.navigationPreload.enable();await self.clients.claim()})())});
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting()});
-
-async function navigationResponse(event){
-  try{
-    const preload=await event.preloadResponse,response=preload||await fetch(event.request);
-    if(response&&response.ok){const cache=await caches.open(RUNTIME);await cache.put(event.request,response.clone())}
-    return response;
-  }catch{return (await caches.match(event.request))||(await caches.match('./index.html'))||(await caches.match('./'))}
-}
-async function staleWhileRevalidate(request){
-  const cached=await caches.match(request);
-  const fetchPromise=fetch(request).then(async response=>{if(response&&response.ok){const cache=await caches.open(RUNTIME);await cache.put(request,response.clone())}return response}).catch(()=>null);
-  if(cached){void fetchPromise;return cached}
-  return (await fetchPromise)||new Response('Offline',{status:503,statusText:'Offline'});
-}
-self.addEventListener('fetch',event=>{
-  const request=event.request;if(request.method!=='GET')return;
-  const url=new URL(request.url);if(url.origin!==self.location.origin)return;
-  if(request.mode==='navigate'){event.respondWith(navigationResponse(event));return}
-  event.respondWith(staleWhileRevalidate(request));
-});
-
-self.addEventListener('notificationclick',event=>{
-  event.notification.close();
-  const data=event.notification.data||{},recipeId=String(data.recipeId||'');
-  const target=new URL('./',self.registration.scope);
-  if(recipeId)target.hash=`rezept=${encodeURIComponent(recipeId)}`;
-  event.waitUntil((async()=>{
-    const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-    const client=windows.find(item=>new URL(item.url).origin===target.origin);
-    if(client){
-      try{await client.navigate(target.href)}catch{}
-      await client.focus();
-      return;
-    }
-    await self.clients.openWindow(target.href);
-  })());
-});
+async function navigationResponse(event){try{const preload=await event.preloadResponse,response=preload||await fetch(event.request);if(response&&response.ok){const cache=await caches.open(RUNTIME);await cache.put(event.request,response.clone())}return response}catch{return (await caches.match(event.request))||(await caches.match('./index.html'))||(await caches.match('./'))}}
+async function staleWhileRevalidate(request){const cached=await caches.match(request),fetchPromise=fetch(request).then(async response=>{if(response&&response.ok){const cache=await caches.open(RUNTIME);await cache.put(request,response.clone())}return response}).catch(()=>null);if(cached){void fetchPromise;return cached}return (await fetchPromise)||new Response('Offline',{status:503,statusText:'Offline'})}
+self.addEventListener('fetch',event=>{const request=event.request;if(request.method!=='GET')return;const url=new URL(request.url);if(url.origin!==self.location.origin)return;if(request.mode==='navigate'){event.respondWith(navigationResponse(event));return}event.respondWith(staleWhileRevalidate(request))});
+self.addEventListener('notificationclick',event=>{event.notification.close();const data=event.notification.data||{},target=data.url?new URL(data.url):new URL('./',self.registration.scope);if(!data.url&&data.recipeId)target.hash=`rezept=${encodeURIComponent(data.recipeId)}`;event.waitUntil((async()=>{const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true}),client=windows.find(item=>new URL(item.url).origin===target.origin);if(client){try{await client.navigate(target.href)}catch{}await client.focus();return}await self.clients.openWindow(target.href)})())});
