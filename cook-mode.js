@@ -7,6 +7,7 @@ let state=null;
 let wakeLock=null;
 let swipe=null;
 let tipTimer=0;
+let timerTick=0;
 
 function currentRecipe(){
   const match=(location.hash||'').match(/^#rezept=(.+)$/);
@@ -46,6 +47,10 @@ function collectSteps(){
       }
     }
   }
+  steps.forEach((step,index)=>{
+    step.globalIndex=index;
+    step.key=`${step.source||'Hauptrezept'}::${step.label}::${step.index}`;
+  });
   return steps;
 }
 function collectIngredients(){
@@ -78,7 +83,7 @@ function ensureButton(){
   button.id='cookModeLaunch';
   button.className='cook-mode-launch';
   button.textContent='Kochmodus';
-  button.addEventListener('click',enter);
+  button.addEventListener('click',()=>enter());
   actions.prepend(button);
 }
 async function acquireWakeLock(){
@@ -104,6 +109,57 @@ function showTip(){
   clearTimeout(tipTimer);
   tipTimer=setTimeout(()=>{tip.classList.remove('is-visible');setTimeout(()=>tip.remove(),220)},2400);
 }
+function candidatesFor(step){return window.GerdTimerParser?.parse?.(step?.text)||[]}
+function timerFor(step,candidate){
+  const engine=window.GerdTimers;if(!engine||!state)return null;
+  const active=engine.forCandidate(state.recipe.id,step.key,candidate.key);
+  if(active)return active;
+  return engine.list().filter(timer=>timer.recipeId===state.recipe.id&&timer.stepKey===step.key&&timer.candidateKey===candidate.key&&timer.status==='finished').sort((a,b)=>(b.finishedAt||0)-(a.finishedAt||0))[0]||null;
+}
+function timerCandidateHtml(candidate,index){
+  return `<button type="button" class="cook-timer-candidate" data-cook-timer-start="${index}"><span><strong>⏱ ${esc(candidate.label==='Timer'?'Timer':candidate.label)}</strong><small>${candidate.type==='range'?`${esc(candidate.display)} starten · bis ${esc(window.GerdTimerParser.format(candidate.maxSeconds))}`:'Voreingestellter Timer'}</small></span><strong>${esc(candidate.display)}</strong></button>`;
+}
+function timerLiveHtml(timer,candidate){
+  const engine=window.GerdTimers,finished=timer.status==='finished',paused=timer.status==='paused';
+  const clock=finished?'Fertig':engine.formatClock(engine.remainingMs(timer));
+  return `<div class="cook-timer-live ${finished?'is-finished':''}" data-cook-timer-id="${esc(timer.id)}"><div class="cook-timer-live-main"><span>⏱ ${esc(timer.label)}</span><strong data-cook-timer-clock>${esc(clock)}</strong><small>${finished?'Zeit ist um':paused?'Pausiert':candidate.type==='range'?`Zielbereich bis ${esc(window.GerdTimerParser.format(candidate.maxSeconds))}`:'Läuft'}</small></div><div class="cook-timer-live-controls">${finished?`${timer.rangeExtraSeconds?`<button type="button" data-cook-timer-extra>+${esc(engine.displayDuration(timer.rangeExtraSeconds))}</button>`:''}<button type="button" data-cook-timer-restart>Neu starten</button><button type="button" data-cook-timer-stop>Entfernen</button>`:`<button type="button" data-cook-timer-pause>${paused?'Weiter':'Pause'}</button><button type="button" data-cook-timer-add>+1 Min.</button><button type="button" data-cook-timer-stop>Beenden</button>`}</div></div>`;
+}
+function renderTimers(){
+  if(!state)return;
+  const area=document.querySelector('[data-cook-timers]'),step=state.steps[state.index];
+  if(!area||!step)return;
+  const candidates=candidatesFor(step);
+  area.hidden=!candidates.length;
+  area.innerHTML=candidates.map((candidate,index)=>{
+    const timer=timerFor(step,candidate);
+    return timer?timerLiveHtml(timer,candidate):timerCandidateHtml(candidate,index);
+  }).join('');
+}
+function updateTimerClocks(){
+  if(!state||!window.GerdTimers)return;
+  document.querySelectorAll('[data-cook-timer-id]').forEach(row=>{
+    const timer=window.GerdTimers.get(row.dataset.cookTimerId),clock=row.querySelector('[data-cook-timer-clock]');
+    if(timer&&clock)clock.textContent=timer.status==='finished'?'Fertig':window.GerdTimers.formatClock(window.GerdTimers.remainingMs(timer));
+  });
+}
+function timerContext(step){return {recipeId:state.recipe.id,recipeTitle:state.recipe.title,stepKey:step.key,stepIndex:step.globalIndex,phase:step.label,source:step.source}}
+async function handleTimerAction(event){
+  if(!state||!window.GerdTimers)return;
+  const start=event.target.closest('[data-cook-timer-start]');
+  if(start){
+    const step=state.steps[state.index],candidate=candidatesFor(step)[Number(start.dataset.cookTimerStart)];
+    if(candidate){await window.GerdTimers.start(candidate,timerContext(step));renderTimers()}
+    return;
+  }
+  const row=event.target.closest('[data-cook-timer-id]');if(!row)return;
+  const id=row.dataset.cookTimerId,timer=window.GerdTimers.get(id);if(!timer)return;
+  if(event.target.closest('[data-cook-timer-pause]'))timer.status==='paused'?await window.GerdTimers.resume(id):await window.GerdTimers.pause(id);
+  else if(event.target.closest('[data-cook-timer-add]'))await window.GerdTimers.addTime(id,60);
+  else if(event.target.closest('[data-cook-timer-extra]'))await window.GerdTimers.restart(id,timer.rangeExtraSeconds||60);
+  else if(event.target.closest('[data-cook-timer-restart]'))await window.GerdTimers.restart(id,timer.minSeconds||timer.durationSeconds);
+  else if(event.target.closest('[data-cook-timer-stop]'))await window.GerdTimers.stop(id);
+  renderTimers();
+}
 function render(){
   if(!state)return;
   const mode=document.querySelector('.cook-mode');
@@ -127,6 +183,7 @@ function render(){
   prev.disabled=state.index===0;
   next.textContent=state.index===state.steps.length-1?'Fertig':'Weiter';
   mode.dataset.phase=step.label.toLowerCase();
+  renderTimers();
 }
 function go(delta){
   if(!state)return;
@@ -146,14 +203,19 @@ function toggleIngredients(force){
   sheet.setAttribute('aria-hidden',String(!open));
   document.querySelector('[data-cook-ingredients]')?.setAttribute('aria-expanded',String(open));
 }
-function enter(){
+function enter({stepIndex=0}={}){
   const recipe=currentRecipe(),steps=collectSteps();
   if(!recipe||!steps.length){
     window.alert('Für dieses Rezept sind keine Arbeitsschritte hinterlegt.');
     return;
   }
+  if(isActive()){
+    state.index=Math.max(0,Math.min(steps.length-1,Number(stepIndex)||0));
+    render();
+    return;
+  }
   const ingredients=collectIngredients();
-  state={recipe,steps,ingredients,index:0};
+  state={recipe,steps,ingredients,index:Math.max(0,Math.min(steps.length-1,Number(stepIndex)||0))};
   document.body.classList.add(MODE_CLASS);
   const overlay=document.createElement('div');
   overlay.className='cook-mode';
@@ -177,7 +239,7 @@ function enter(){
         </div>
         <div class="cook-step-main">
           <span class="cook-step-number" data-cook-number></span>
-          <p data-cook-step></p>
+          <div class="cook-step-content"><p data-cook-step></p><div class="cook-timers" data-cook-timers hidden></div></div>
         </div>
       </div>
     </main>
@@ -197,13 +259,16 @@ function enter(){
   overlay.querySelector('[data-cook-ingredients]').addEventListener('click',()=>toggleIngredients());
   overlay.querySelector('[data-cook-ingredients-close]').addEventListener('click',()=>toggleIngredients(false));
   overlay.querySelector('.cook-ingredients-backdrop').addEventListener('click',()=>toggleIngredients(false));
+  overlay.querySelector('[data-cook-timers]').addEventListener('click',handleTimerAction);
   render();
   acquireWakeLock();
   showTip();
+  clearInterval(timerTick);timerTick=setInterval(updateTimerClocks,500);
 }
 function leave(){
   if(!isActive())return;
   clearTimeout(tipTimer);
+  clearInterval(timerTick);timerTick=0;
   toggleIngredients(false);
   document.querySelector('.cook-mode')?.remove();
   document.body.classList.remove(MODE_CLASS);
@@ -211,8 +276,14 @@ function leave(){
   swipe=null;
   releaseWakeLock();
 }
+function openAt(stepIndex,recipeId){
+  const recipe=currentRecipe();
+  if(!recipe||recipeId&&recipe.id!==recipeId)return false;
+  enter({stepIndex:Number(stepIndex)||0});
+  return true;
+}
 function startSwipe(event){
-  if(!isActive()||event.pointerType==='mouse'||event.target.closest('button,.cook-ingredients'))return;
+  if(!isActive()||event.pointerType==='mouse'||event.target.closest('button,.cook-ingredients,.cook-timers'))return;
   swipe={id:event.pointerId,x:event.clientX,y:event.clientY};
 }
 function moveSwipe(event){
@@ -226,6 +297,16 @@ function endSwipe(event){
   swipe=null;
   if(Math.abs(dx)<SWIPE_DISTANCE||Math.abs(dx)<Math.abs(dy)*1.25)return;
   go(dx<0?1:-1);
+}
+function maybeOpenPending(){
+  if(!isDetail()||isActive())return;
+  try{
+    const raw=sessionStorage.getItem('gerds-open-cook-step');if(!raw)return;
+    const pending=JSON.parse(raw),recipe=currentRecipe();
+    if(!pending||pending.recipeId!==recipe?.id)return;
+    sessionStorage.removeItem('gerds-open-cook-step');
+    enter({stepIndex:Number(pending.stepIndex)||0});
+  }catch{sessionStorage.removeItem('gerds-open-cook-step')}
 }
 document.addEventListener('pointerdown',startSwipe);
 document.addEventListener('pointermove',moveSwipe,{passive:false});
@@ -243,10 +324,12 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible')acquireWakeLock();else releaseWakeLock();
 });
 window.addEventListener('popstate',()=>{if(isActive())leave()});
+window.addEventListener(window.GerdTimers?.EVENT||'gerds:timers-changed',()=>{if(isActive())renderTimers()});
 
 let queued=false;
-function sync(){queued=false;if(isActive()&&!isDetail())leave();else ensureButton()}
+function sync(){queued=false;if(isActive()&&!isDetail())leave();else{ensureButton();maybeOpenPending()}}
 function queue(){if(queued)return;queued=true;requestAnimationFrame(sync)}
 new MutationObserver(queue).observe(document.body,{childList:true,subtree:true});
+window.GerdCookMode={enter,leave,openAt,isActive};
 queue();
 })();
