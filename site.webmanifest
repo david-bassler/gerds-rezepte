@@ -1,17 +1,58 @@
 {
   "name": "Gerds Rezepte",
-  "short_name": "Gerds Rezepte",
+  "short_name": "Gerds",
   "description": "Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche.",
+  "id": "./",
   "start_url": "./",
+  "scope": "./",
+  "lang": "de-DE",
+  "dir": "ltr",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#fbf8f1",
   "theme_color": "#29483a",
+  "categories": ["food", "lifestyle"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "assets/images/logo-kitchen.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "assets/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "assets/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/images/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Rezepte",
+      "short_name": "Rezepte",
+      "url": "./"
+    },
+    {
+      "name": "Favoriten",
+      "short_name": "Favoriten",
+      "url": "./#favoriten"
+    },
+    {
+      "name": "Einkaufsliste",
+      "short_name": "Einkauf",
+      "url": "./#einkaufsliste"
+    },
+    {
+      "name": "Küchenwissen",
+      "short_name": "Wissen",
+      "url": "./#kuechenwissen"
     }
   ]
 }
