@@ -19,11 +19,16 @@ const UNIT_FORMS={
   'Dösch.':['Döschen','Döschen'],
   'Ds':['Dose','Dosen'],
   'Dose':['Dose','Dosen'],
-  'Beet':['Beet','Beete']
+  'Beet':['Beet','Beete'],
+  'Zehe':['Zehe','Zehen'],
+  'Zehen':['Zehe','Zehen'],
+  'Knolle':['Knolle','Knollen'],
+  'Knollen':['Knolle','Knollen']
 };
 const SHOPPING_FORMS={
   Scheibe:['Scheibe','Scheiben'],Blatt:['Blatt','Blätter'],Zweig:['Zweig','Zweige'],
-  Bund:['Bund','Bünde'],Dose:['Dose','Dosen'],Beet:['Beet','Beete'],Prise:['Prise','Prisen']
+  Bund:['Bund','Bünde'],Dose:['Dose','Dosen'],Beet:['Beet','Beete'],Prise:['Prise','Prisen'],
+  Zehe:['Zehe','Zehen'],Zehen:['Zehe','Zehen'],Knolle:['Knolle','Knollen'],Knollen:['Knolle','Knollen']
 };
 
 function currentRecipe(){
