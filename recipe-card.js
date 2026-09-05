@@ -37,8 +37,9 @@ function imageVisual(src){
 function visual(r){return r.images?.length?imageVisual(r.images[0]):`<div class="card-visual no-image">${cuisineVisual(r.cuisine,r.title)}</div>`}
 function render(r){
   const subrecipes=Array.isArray(r.subrecipes)?r.subrecipes:[];
-  const tags=Array.isArray(r.prominentTags)?r.prominentTags:[];
-  return `<article class="recipe-card"><button class="open-card" type="button" data-recipe="${esc(r.id)}">${visual(r)}<div class="card-body"><div class="card-taxonomy"><span class="category">${esc(r.category)}</span><span class="cuisine-badge">${esc(r.cuisine)}${r.region?` · ${esc(r.region)}`:''}</span></div><h3>${esc(r.title)}</h3><div class="meta-row"><span>◷ ca. ${fmtDuration(r.durationMinutes)}</span><span>·</span><span>${esc(baseLabel(r))}</span>${subrecipes.length?`<span>· ${subrecipes.length} Unterrezept${subrecipes.length===1?'':'e'}</span>`:''}</div><div class="mini-tags">${tags.slice(0,3).map(t=>`<span class="mini-tag">${esc(t)}</span>`).join('')}</div></div></button></article>`;
+  const tags=Array.isArray(r.prominentTags)?r.prominentTags.filter(Boolean).slice(0,2):[];
+  const cuisine=[r.cuisine,r.region].filter(Boolean).join(' · ');
+  return `<article class="recipe-card"><button class="open-card" type="button" data-recipe="${esc(r.id)}">${visual(r)}<div class="card-body"><span class="category">${esc(r.category)}</span><h3>${esc(r.title)}</h3><div class="card-context"><span>${esc(cuisine)}</span><span aria-hidden="true">·</span><span>${fmtDuration(r.durationMinutes)}</span><span aria-hidden="true">·</span><span>${esc(baseLabel(r))}</span></div>${tags.length?`<div class="card-tags-text">${tags.map(esc).join(' · ')}</div>`:''}${subrecipes.length?`<div class="card-subrecipe-note">${subrecipes.length} Unterrezept${subrecipes.length===1?'':'e'}</div>`:''}</div></button></article>`;
 }
 
 window.GerdRecipeCard=Object.freeze({render});
