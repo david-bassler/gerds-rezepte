@@ -6,7 +6,7 @@ const FORMAT='gerds-rezepte-backup';
 const BACKUP_VERSION=2;
 const STORES=['favorites','shopping','recipePlans','recipeNotes','timers'];
 const STORAGE_KEYS=['gerds-shopping-order-v1'];
-let dbPromise=null;
+let dbPromise=null,pendingImport=null;
 
 function openDb(){
   if(dbPromise)return dbPromise;
@@ -85,16 +85,22 @@ function ensureUi(){
   let trigger=document.getElementById('personalDataOpen');
   if(!trigger){const footer=document.querySelector('.footer-inner');if(footer){trigger=document.createElement('button');trigger.type='button';trigger.id='personalDataOpen';trigger.className='personal-data-open';trigger.textContent='Daten sichern';footer.appendChild(trigger)}}
   if(!document.getElementById('personalDataDialog')){
-    document.body.insertAdjacentHTML('beforeend',`<dialog class="personal-data-dialog" id="personalDataDialog" aria-labelledby="personalDataTitle"><div class="personal-data-head"><div><span class="category">Nur auf diesem Gerät</span><h2 id="personalDataTitle">Meine Daten</h2></div><button type="button" class="personal-data-close" data-personal-data-close aria-label="Schließen">×</button></div><p>Favoriten, Einkaufsliste, Portionspläne, persönliche Notizen und Timer werden lokal im Browser gespeichert. Mit einer Sicherung kannst du sie aufbewahren oder auf ein anderes Gerät übertragen.</p><div class="personal-data-summary" data-personal-data-summary>Gespeicherte Daten werden geladen …</div><div class="personal-data-actions"><button type="button" class="personal-data-primary" id="personalDataExport">Sicherung exportieren</button><button type="button" id="personalDataImport">Sicherung importieren</button><input type="file" id="personalDataFile" accept=".json,application/json" hidden></div><p class="personal-data-hint"><strong>Import:</strong> Der Inhalt der Sicherung ersetzt die aktuell auf diesem Gerät gespeicherten persönlichen Daten.</p><div class="personal-data-status" data-personal-data-status role="status" aria-live="polite"></div></dialog>`);
+    document.body.insertAdjacentHTML('beforeend',`<dialog class="personal-data-dialog" id="personalDataDialog" aria-labelledby="personalDataTitle"><div class="personal-data-head"><div><span class="category">Nur auf diesem Gerät</span><h2 id="personalDataTitle">Meine Daten</h2><p>Favoriten, Einkaufsliste, Portionspläne, persönliche Notizen und Timer.</p></div><button type="button" class="personal-data-close" data-personal-data-close aria-label="Schließen">×</button></div><div class="personal-data-summary" data-personal-data-summary>Gespeicherte Daten werden geladen …</div><div class="personal-data-actions"><button type="button" class="personal-data-primary" id="personalDataExport">Sicherung exportieren</button><button type="button" id="personalDataImport">Sicherung importieren</button><input type="file" id="personalDataFile" accept=".json,application/json" hidden></div><p class="personal-data-hint">Eine Sicherung ist eine JSON-Datei für den privaten Transfer auf ein anderes Gerät. Beim Import werden die hier gespeicherten persönlichen Daten ersetzt.</p><div class="personal-data-import-confirm" data-import-confirm hidden><span>Import bestätigen</span><strong data-import-title></strong><p data-import-summary></p><div><button type="button" data-import-cancel>Abbrechen</button><button type="button" class="is-danger" data-import-apply>Daten ersetzen</button></div></div><div class="personal-data-status" data-personal-data-status role="status" aria-live="polite"></div></dialog>`);
   }
   bind();
 }
+function resetImportConfirmation(){
+  pendingImport=null;
+  const panel=document.querySelector('[data-import-confirm]');
+  if(panel)panel.hidden=true;
+}
 function openDialog(){
   const dialog=document.getElementById('personalDataDialog'),summary=document.querySelector('[data-personal-data-summary]');if(!dialog)return;
+  resetImportConfirmation();setStatus('');
   if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
   if(summary){summary.textContent='Gespeicherte Daten werden geladen …';snapshot().then(data=>summary.textContent=summaryText(data)).catch(()=>summary.textContent='Gespeicherte Daten konnten nicht gelesen werden.')}
 }
-function closeDialog(){const dialog=document.getElementById('personalDataDialog');if(!dialog)return;if(dialog.close)dialog.close();else dialog.removeAttribute('open')}
+function closeDialog(){resetImportConfirmation();const dialog=document.getElementById('personalDataDialog');if(!dialog)return;if(dialog.close)dialog.close();else dialog.removeAttribute('open')}
 function setStatus(text,error=false){const status=document.querySelector('[data-personal-data-status]');if(!status)return;status.textContent=text;status.classList.toggle('is-error',error)}
 function bind(){
   const trigger=document.getElementById('personalDataOpen'),dialog=document.getElementById('personalDataDialog');
@@ -102,8 +108,30 @@ function bind(){
   if(!dialog||dialog.dataset.bound)return;dialog.dataset.bound='1';
   dialog.querySelector('[data-personal-data-close]')?.addEventListener('click',closeDialog);dialog.addEventListener('click',event=>{if(event.target===dialog)closeDialog()});
   document.getElementById('personalDataExport')?.addEventListener('click',async()=>{setStatus('Sicherung wird erstellt …');try{const data=await snapshot(),day=new Date().toISOString().slice(0,10);download(`gerds-rezepte-backup-${day}.json`,JSON.stringify(data,null,2));setStatus(`Sicherung erstellt: ${summaryText(data)}.`)}catch(error){console.warn('Persönliche Daten konnten nicht exportiert werden.',error);setStatus('Die Sicherung konnte nicht erstellt werden.',true)}});
-  const input=document.getElementById('personalDataFile');document.getElementById('personalDataImport')?.addEventListener('click',()=>{if(input){input.value='';input.click()}});
-  input?.addEventListener('change',async()=>{const file=input.files?.[0];if(!file)return;setStatus('Sicherung wird geprüft …');try{const data=validateBackup(JSON.parse(await file.text())),info=summaryText(data),ok=window.confirm(`Sicherung vom ${dateLabel(data.exportedAt)} importieren?\n\n${info}\n\nDie aktuell gespeicherten persönlichen Daten auf diesem Gerät werden ersetzt.`);if(!ok){setStatus('Import abgebrochen.');return}setStatus('Daten werden wiederhergestellt …');await restore(data);window.alert('Die persönlichen Daten wurden erfolgreich wiederhergestellt. Die App wird jetzt neu geladen.');location.reload()}catch(error){console.warn('Persönliche Daten konnten nicht importiert werden.',error);setStatus(error?.message||'Die Sicherung konnte nicht importiert werden.',true)}});
+  const input=document.getElementById('personalDataFile');document.getElementById('personalDataImport')?.addEventListener('click',()=>{resetImportConfirmation();if(input){input.value='';input.click()}});
+  input?.addEventListener('change',async()=>{
+    const file=input.files?.[0];if(!file)return;
+    setStatus('Sicherung wird geprüft …');
+    try{
+      const data=validateBackup(JSON.parse(await file.text())),panel=document.querySelector('[data-import-confirm]');
+      pendingImport=data;
+      if(panel){
+        panel.hidden=false;
+        const title=panel.querySelector('[data-import-title]'),info=panel.querySelector('[data-import-summary]');
+        if(title)title.textContent=`Sicherung vom ${dateLabel(data.exportedAt)}`;
+        if(info)info.textContent=`${summaryText(data)}. Die aktuell gespeicherten Daten werden ersetzt.`;
+      }
+      setStatus('');
+      panel?.querySelector('[data-import-apply]')?.focus();
+    }catch(error){pendingImport=null;console.warn('Persönliche Daten konnten nicht importiert werden.',error);setStatus(error?.message||'Die Sicherung konnte nicht importiert werden.',true)}
+  });
+  dialog.querySelector('[data-import-cancel]')?.addEventListener('click',()=>{resetImportConfirmation();setStatus('Import abgebrochen.')});
+  dialog.querySelector('[data-import-apply]')?.addEventListener('click',async()=>{
+    if(!pendingImport)return;
+    const data=pendingImport;resetImportConfirmation();setStatus('Daten werden wiederhergestellt …');
+    try{await restore(data);setStatus('Daten wiederhergestellt. Die App wird neu geladen …');setTimeout(()=>location.reload(),700)}
+    catch(error){console.warn('Persönliche Daten konnten nicht importiert werden.',error);setStatus(error?.message||'Die Sicherung konnte nicht importiert werden.',true)}
+  });
 }
 ensureUi();
 })();
