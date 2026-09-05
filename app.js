@@ -139,8 +139,16 @@ function showRecipes({replace=false,write=true,restoreScroll=null}={}){state.rou
 function showKnowledge({replace=false,write=true}={}){state.route='knowledge';setNav('knowledge');renderKnowledge();if(write)writeHistory('knowledge',{replace});scrollTo({top:0,behavior:'smooth'})}
 function openRecipe(id,{replace=false,write=true,fromArchive=true}={}){if(write){if(state.route==='recipes'&&history.state?.route==='recipes')writeHistory('recipes',{replace:true});writeHistory('detail',{id,replace,fromArchive})}renderDetail(id);}
 function goRecipes(){showRecipes()}
-document.querySelectorAll('[data-route]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.route==='knowledge')showKnowledge();else showRecipes()}));
-const topbar=document.querySelector('.topbar');let topbarRaf=0;function updateTopbarState(){topbarRaf=0;if(!topbar)return;const hasHero=(document.body.dataset.route||state.route)==='recipes';const showBrand=!hasHero||window.scrollY>4;topbar.classList.toggle('is-stuck',showBrand);topbar.classList.toggle('show-brand',showBrand);document.body.classList.toggle('has-hero',hasHero)}updateTopbarState();window.addEventListener('scroll',()=>{if(!topbarRaf)topbarRaf=requestAnimationFrame(updateTopbarState)},{passive:true});
+const topbar=document.querySelector('.topbar');
+const navToggle=document.getElementById('navToggle');
+function closeNavMenu(){topbar?.classList.remove('nav-open');navToggle?.setAttribute('aria-expanded','false')}
+function toggleNavMenu(){if(!topbar||!navToggle)return;const open=!topbar.classList.contains('nav-open');topbar.classList.toggle('nav-open',open);navToggle.setAttribute('aria-expanded',String(open))}
+document.querySelectorAll('[data-route]').forEach(b=>b.addEventListener('click',()=>{closeNavMenu();if(b.dataset.route==='knowledge')showKnowledge();else showRecipes()}));
+navToggle?.addEventListener('click',event=>{event.stopPropagation();toggleNavMenu()});
+document.addEventListener('click',event=>{if(topbar?.classList.contains('nav-open')&&!event.target.closest('.topbar-inner'))closeNavMenu()});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')closeNavMenu()});
+window.addEventListener('resize',()=>{if(window.innerWidth>680)closeNavMenu()});
+let topbarRaf=0;function updateTopbarState(){topbarRaf=0;if(!topbar)return;const hasHero=(document.body.dataset.route||state.route)==='recipes';const showBrand=!hasHero||window.scrollY>4;topbar.classList.toggle('is-stuck',showBrand);topbar.classList.toggle('show-brand',showBrand);document.body.classList.toggle('has-hero',hasHero)}updateTopbarState();window.addEventListener('scroll',()=>{if(!topbarRaf)topbarRaf=requestAnimationFrame(updateTopbarState)},{passive:true});
 if('scrollRestoration' in history)history.scrollRestoration='manual';
 window.addEventListener('popstate',e=>{const h=e.state;if(h?.filters)restoreFilters(h.filters);if(h?.route==='detail'&&h.id){renderDetail(h.id);return}if(h?.route==='knowledge'){showKnowledge({write:false});return}showRecipes({write:false,restoreScroll:Number(h?.scrollY)||0})});
 function renderRecipes(){setNav('recipes');app.innerHTML=`
