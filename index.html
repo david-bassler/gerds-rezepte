@@ -28,16 +28,17 @@
   <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
   <link rel="manifest" href="site.webmanifest">
   <link rel="preload" as="image" href="assets/images/hero-kitchen.webp">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="lists.css">
-  <link rel="stylesheet" href="nav-icons.css">
-  <link rel="stylesheet" href="shopping-ui.css">
-  <link rel="stylesheet" href="shopping-reorder.css">
-  <link rel="stylesheet" href="shopping-focus.css">
-  <link rel="stylesheet" href="pwa.css">
-  <link rel="stylesheet" href="personal-data.css">
-  <link rel="stylesheet" href="cook-mode.css">
-  <link rel="stylesheet" href="timers.css">
+  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="lists.css?v=16">
+  <link rel="stylesheet" href="nav-icons.css?v=16">
+  <link rel="stylesheet" href="shopping-ui.css?v=16">
+  <link rel="stylesheet" href="shopping-reorder.css?v=16">
+  <link rel="stylesheet" href="shopping-focus.css?v=16">
+  <link rel="stylesheet" href="pwa.css?v=16">
+  <link rel="stylesheet" href="personal-data.css?v=16">
+  <link rel="stylesheet" href="cook-mode.css?v=16">
+  <link rel="stylesheet" href="timers.css?v=16">
+  <style id="navBootstrap">#navToggle[hidden]{display:none!important}@media(max-width:680px){#navToggle.nav-ready{display:inline-flex!important}}</style>
 </head>
 <body>
   <header class="topbar">
@@ -46,7 +47,7 @@
         <span class="brand-mark" aria-hidden="true"><img src="assets/images/logo-kitchen.svg" alt=""></span>
         <span class="brand-copy"><strong>Gerds Rezepte</strong><small>Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche</small></span>
       </button>
-      <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="siteNav"><span aria-hidden="true"></span><strong>Menü</strong></button>
+      <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="siteNav" hidden><span aria-hidden="true"></span><strong>Menü</strong></button>
       <nav class="nav" id="siteNav" aria-label="Hauptnavigation">
         <button type="button" class="nav-main-item" data-route="recipes">Rezepte</button>
         <button type="button" class="nav-main-item" data-route="knowledge">Küchenwissen</button>
@@ -56,23 +57,23 @@
   <main id="app"></main>
   <footer><div class="shell footer-inner"><span>Gerds Rezepte · aus dem privaten Rezeptarchiv</span><span id="footerStats"></span></div></footer>
   <script>window.__gerdsInitialListHash=['#favoriten','#einkaufsliste'].includes(location.hash)?location.hash:'';</script>
-  <script src="recipes-data.js"></script>
-  <script src="data-fixes.js"></script>
-  <script src="editorial-fixes.js"></script>
-  <script src="shopping-eligibility.js"></script>
-  <script src="recipe-card.js"></script>
-  <script src="app.js"></script>
-  <script src="glossary-boundary-fixes.js"></script>
-  <script src="ingredient-ui.js"></script>
+  <script src="recipes-data.js?v=16"></script>
+  <script src="data-fixes.js?v=16"></script>
+  <script src="editorial-fixes.js?v=16"></script>
+  <script src="shopping-eligibility.js?v=16"></script>
+  <script src="recipe-card.js?v=16"></script>
+  <script src="app.js?v=16"></script>
+  <script src="glossary-boundary-fixes.js?v=16"></script>
+  <script src="ingredient-ui.js?v=16"></script>
   <script>if(window.__gerdsInitialListHash){const route=window.__gerdsInitialListHash==='#favoriten'?'favorites':'shopping';history.replaceState({route},'',window.__gerdsInitialListHash);}</script>
-  <script src="lists.js"></script>
-  <script src="shopping-ui.js"></script>
-  <script src="shopping-reorder.js"></script>
-  <script src="shopping-focus.js"></script>
-  <script src="timer-parser.js"></script>
-  <script src="timers.js"></script>
-  <script src="cook-mode.js"></script>
-  <script src="personal-data.js"></script>
-  <script src="pwa.js"></script>
+  <script src="lists.js?v=16"></script>
+  <script src="shopping-ui.js?v=16"></script>
+  <script src="shopping-reorder.js?v=16"></script>
+  <script src="shopping-focus.js?v=16"></script>
+  <script src="timer-parser.js?v=16"></script>
+  <script src="timers.js?v=16"></script>
+  <script src="cook-mode.js?v=16"></script>
+  <script src="personal-data.js?v=16"></script>
+  <script src="pwa.js?v=16"></script>
 </body>
 </html>
