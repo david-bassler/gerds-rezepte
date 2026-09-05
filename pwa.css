@@ -24,3 +24,5 @@
   .pwa-toast{align-items:start}
 }
 @media print{.pwa-toast-stack{display:none!important}}
+body.has-timer-dock .pwa-toast-stack{bottom:max(82px,calc(env(safe-area-inset-bottom) + 82px))}
+body.cook-mode-active.has-timer-dock .pwa-toast-stack{bottom:calc(142px + env(safe-area-inset-bottom))}
