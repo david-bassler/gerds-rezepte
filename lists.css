@@ -2,3 +2,27 @@
 @media(max-width:900px){.favorite-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.topbar .nav{gap:4px}.topbar .nav button{padding-left:8px;padding-right:8px}}
 @media(max-width:680px){.topbar-inner{align-items:center}.topbar .nav{overflow-x:auto;scrollbar-width:none;white-space:nowrap;max-width:100%;padding-bottom:2px}.topbar .nav::-webkit-scrollbar{display:none}.topbar .nav button{font-size:13px}.brand-copy small{display:none}.favorite-grid{grid-template-columns:1fr}.list-head{align-items:flex-start;flex-direction:column}.shopping-row{grid-template-columns:auto minmax(0,1fr) auto}.shopping-remove{grid-column:3}.shopping-amount{grid-column:2;text-align:left}.nav-count{display:none}}
 @media print{.bookmark-btn,.detail-favorite,.ingredient.is-shopping-enabled::after{display:none!important}}
+/* Persönliche Sammlung: ruhiger als die Archivansicht */
+.favorite-page .shell{max-width:1120px}
+.favorite-head{align-items:flex-end;margin-bottom:10px}
+.favorite-intro{margin:0 0 22px;color:#7b847d;font-size:12px}
+.favorite-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.favorite-grid .recipe-card{min-height:176px;box-shadow:none}
+.favorite-grid .card-visual{min-height:176px}
+.favorite-actions-menu{position:relative}
+.favorite-actions-menu>summary{list-style:none;width:40px;height:40px;display:grid;place-items:center;border:1px solid rgba(41,72,58,.18);border-radius:10px;background:#fff;color:#29483a;font-size:15px;font-weight:900;letter-spacing:.07em;cursor:pointer}
+.favorite-actions-menu>summary::-webkit-details-marker{display:none}
+.favorite-actions-menu[open]>summary{background:#eef2ed;border-color:rgba(41,72,58,.34)}
+.favorite-actions-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:210px;padding:6px;border:1px solid rgba(41,72,58,.16);border-radius:12px;background:#fff;box-shadow:0 18px 44px rgba(31,43,34,.16)}
+.favorite-actions-panel button{display:block;width:100%;border:0;background:transparent;border-radius:8px;padding:9px 10px;text-align:left;color:#9a452e;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.favorite-actions-panel button:hover{background:#f6efeb}
+.favorite-empty{display:grid;gap:6px;padding:28px;border:1px solid #ded9cc;border-radius:16px;background:#fff}
+.favorite-empty strong{font:700 20px Georgia,serif;color:#29483a}
+.favorite-empty span{color:#69736c;font-size:13px;max-width:540px}
+@media(max-width:760px){
+  .favorite-grid{grid-template-columns:1fr}
+  .favorite-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:end}
+  .favorite-actions-panel{position:fixed;left:14px;right:14px;top:auto;bottom:max(14px,env(safe-area-inset-bottom));min-width:0;border-radius:15px;padding:8px}
+  .favorite-actions-panel button{padding:12px 11px;font-size:14px}
+}
+@media print{.favorite-actions-menu{display:none!important}}
