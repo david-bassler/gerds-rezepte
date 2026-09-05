@@ -88,22 +88,21 @@ function ingredientHtml(groups){
 }
 function ensureButton(){
   if(!isDetail())return;
-  const actions=document.querySelector('.detail-actions');
+  const actions=document.querySelector('.detail-command-primary')||document.querySelector('.detail-actions');
   if(actions&&!actions.querySelector('#cookModeLaunch')){
     const button=document.createElement('button');
     button.type='button';
     button.id='cookModeLaunch';
     button.className='cook-mode-launch';
-    button.textContent='Kochmodus';
+    button.textContent='Kochmodus starten';
     button.addEventListener('click',()=>enter({scope:'all'}));
     actions.prepend(button);
   }
   [...document.querySelectorAll('#subrecipes .subrecipe')].forEach((details,index)=>{
     if(details.querySelector(':scope > .cook-subrecipe-action'))return;
-    const source=text(details.querySelector(':scope > summary'))||'Unterrezept';
     const action=document.createElement('div');
     action.className='cook-subrecipe-action';
-    action.innerHTML=`<button type="button" data-cook-subrecipe="${index}">Kochmodus für „${esc(source)}“</button>`;
+    action.innerHTML=`<button type="button" data-cook-subrecipe="${index}">Kochmodus</button>`;
     details.querySelector(':scope > .sub-inner')?.before(action);
     action.querySelector('button')?.addEventListener('click',()=>enter({scope:`sub:${index}`}));
   });
