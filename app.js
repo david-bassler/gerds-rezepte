@@ -332,9 +332,9 @@ function renderKnowledge(){
     <div class="knowledge-layout">
       <nav class="knowledge-nav" aria-label="Inhalt Küchenwissen">
         <span>Inhalt</span>
-        <a href="#vorwort"><b>01</b> Grundlagen</a>
-        <a href="#masse"><b>02</b> Maße & Gewichte</a>
-        <a href="#garmethoden"><b>03</b> Garmethoden</a>
+        <button type="button" data-knowledge-target="vorwort"><b>01</b> Grundlagen</button>
+        <button type="button" data-knowledge-target="masse"><b>02</b> Maße & Gewichte</button>
+        <button type="button" data-knowledge-target="garmethoden"><b>03</b> Garmethoden</button>
       </nav>
       <div class="knowledge-document">
         <section id="vorwort" class="knowledge-section">
@@ -351,7 +351,10 @@ function renderKnowledge(){
         </section>
       </div>
     </div>
-  </div></div>`
+  </div></div>`;
+  document.querySelectorAll('[data-knowledge-target]').forEach(button=>button.addEventListener('click',()=>{
+    document.getElementById(button.dataset.knowledgeTarget)?.scrollIntoView({behavior:'smooth',block:'start'})
+  }))
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.glossary-term'))document.querySelectorAll('.glossary-term:focus').forEach(el=>el.blur())});
 function initialRoute(){const h=location.hash||'';const m=h.match(/^#rezept=(.+)$/);if(m){const id=decodeURIComponent(m[1]);if(DATA.recipes.some(r=>r.id===id)){writeHistory('detail',{id,replace:true,fromArchive:false});renderDetail(id);return}}if(h==='#kuechenwissen'){showKnowledge({replace:true});return}showRecipes({replace:true})}
