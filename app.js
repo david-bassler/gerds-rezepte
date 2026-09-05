@@ -203,7 +203,7 @@ function resetRecipeFilters(){
 function openRecipeFilters(){
   document.body.classList.add('archive-filters-open');
   document.getElementById('openFilters')?.setAttribute('aria-expanded','true');
-  requestAnimationFrame(()=>document.getElementById('searchInput')?.focus({preventScroll:true}));
+  requestAnimationFrame(()=>document.getElementById('closeFilters')?.focus({preventScroll:true}));
 }
 function closeRecipeFilters({restoreFocus=true}={}){
   document.body.classList.remove('archive-filters-open');
