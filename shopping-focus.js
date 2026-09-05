@@ -51,6 +51,8 @@ function hideTip(){
 
 function enterMode(){
   if(isActive()||!isShoppingPage())return;
+  document.body.classList.remove('shopping-sort-mode');
+  document.querySelector('.shopping-sort-toolbar')?.remove();
   document.body.classList.add(MODE_CLASS);
   showTip();
   const request=document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen;
