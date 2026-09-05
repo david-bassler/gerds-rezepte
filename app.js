@@ -130,7 +130,7 @@ function seasoningAdviceHtml(table,target,main){
 }
 DATA.recipes.forEach(r=>{const tables=[r,...r.subrecipes];r._tagSet=new Set(r.tags.map(norm));r._search=norm([r.title,r.category,r.cuisine,r.region,r.style,...r.styleTags,...r.tags,...tables.flatMap(t=>[...t.ingredients.map(i=>i.article),...t.notes,...t.preparation,...t.cooking])].join(' '))});
 document.getElementById('footerStats').textContent=`${recipeCountLabel(DATA.meta.recipeCount)} · ${ingredientLineCountLabel(DATA.meta.ingredientLineCount)}`;
-function setNav(route){document.querySelectorAll('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));document.body.dataset.route=route;updateTopbarState()}
+function setNav(route){document.querySelectorAll('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));document.body.dataset.route=route;if(route!=='recipes')document.body.classList.remove('archive-filters-open');updateTopbarState()}
 function filterSnapshot(){return {query:state.query,category:state.category,cuisine:state.cuisine,duration:state.duration,ingredients:[...state.ingredients],sort:state.sort,visible:state.visible}}
 function restoreFilters(saved){if(!saved)return;state.query=saved.query||'';state.category=saved.category||'';state.cuisine=saved.cuisine||'';state.duration=saved.duration||'';state.ingredients=Array.isArray(saved.ingredients)?[...saved.ingredients]:[];state.sort=saved.sort||'title';state.visible=Number(saved.visible)||PAGE_SIZE}
 function historyUrl(route,id=''){if(route==='detail')return `#rezept=${encodeURIComponent(id)}`;if(route==='knowledge')return '#kuechenwissen';return '#'}
@@ -159,12 +159,87 @@ syncNavToggle();
 let topbarRaf=0;function updateTopbarState(){topbarRaf=0;if(!topbar)return;const hasHero=(document.body.dataset.route||state.route)==='recipes';const showBrand=!hasHero||window.scrollY>4;topbar.classList.toggle('is-stuck',showBrand);topbar.classList.toggle('show-brand',showBrand);document.body.classList.toggle('has-hero',hasHero)}updateTopbarState();window.addEventListener('scroll',()=>{if(!topbarRaf)topbarRaf=requestAnimationFrame(updateTopbarState)},{passive:true});
 if('scrollRestoration' in history)history.scrollRestoration='manual';
 window.addEventListener('popstate',e=>{const h=e.state;if(h?.filters)restoreFilters(h.filters);if(h?.route==='detail'&&h.id){renderDetail(h.id);return}if(h?.route==='knowledge'){showKnowledge({write:false});return}showRecipes({write:false,restoreScroll:Number(h?.scrollY)||0})});
+function activeFilterEntries(){
+  const entries=[];
+  if(state.query.trim())entries.push({kind:'query',label:`Suche: ${state.query.trim()}`});
+  if(state.category)entries.push({kind:'category',label:state.category});
+  if(state.cuisine)entries.push({kind:'cuisine',label:state.cuisine});
+  if(state.duration){
+    const option=DURATION_OPTIONS.find(([value])=>value===String(state.duration));
+    entries.push({kind:'duration',label:option?.[1]||`bis ${state.duration} Min.`});
+  }
+  state.ingredients.forEach((name,index)=>entries.push({kind:'ingredient',index,label:name}));
+  return entries;
+}
+function activeFilterCount(){return activeFilterEntries().length}
+function activeFiltersHtml(){
+  const entries=activeFilterEntries();
+  if(!entries.length)return '<span class="archive-filter-empty">Alle Rezepte</span>';
+  return entries.map(entry=>`<button type="button" class="active-filter-chip" data-clear-filter="${entry.kind}" ${entry.index===undefined?'':`data-filter-index="${entry.index}"`}><span>${esc(entry.label)}</span><b aria-hidden="true">×</b></button>`).join('');
+}
+function clearActiveFilter(kind,index){
+  if(kind==='query')state.query='';
+  else if(kind==='category')state.category='';
+  else if(kind==='cuisine')state.cuisine='';
+  else if(kind==='duration')state.duration='';
+  else if(kind==='ingredient'&&Number.isInteger(index))state.ingredients.splice(index,1);
+  state.visible=PAGE_SIZE;
+  renderRecipes();
+}
+function bindActiveFilterChips(){
+  document.querySelectorAll('[data-clear-filter]').forEach(button=>button.addEventListener('click',()=>clearActiveFilter(button.dataset.clearFilter,Number(button.dataset.filterIndex))));
+}
+function renderActiveFilters(){
+  const root=document.getElementById('activeFilters');if(!root)return;
+  root.innerHTML=activeFiltersHtml();
+  bindActiveFilterChips();
+  const badge=document.getElementById('filterCountBadge'),count=activeFilterCount();
+  if(badge){badge.textContent=String(count);badge.hidden=!count}
+}
+function resetRecipeFilters(){
+  state.query='';state.category='';state.cuisine='';state.duration='';state.ingredients=[];state.sort='title';state.visible=PAGE_SIZE;
+  renderRecipes();
+}
+function openRecipeFilters(){
+  document.body.classList.add('archive-filters-open');
+  document.getElementById('openFilters')?.setAttribute('aria-expanded','true');
+  requestAnimationFrame(()=>document.getElementById('searchInput')?.focus({preventScroll:true}));
+}
+function closeRecipeFilters({restoreFocus=true}={}){
+  document.body.classList.remove('archive-filters-open');
+  document.getElementById('openFilters')?.setAttribute('aria-expanded','false');
+  if(restoreFocus)document.getElementById('openFilters')?.focus({preventScroll:true});
+}
 function renderRecipes(){setNav('recipes');app.innerHTML=`
 <section class="hero"><div class="shell"><div class="hero-panel"><div class="hero-copy"><h1>Gerds Rezepte</h1><p class="hero-tagline">Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche</p><div class="hero-meta"><span><strong>${fmtInt(DATA.meta.recipeCount)}</strong> ${Number(DATA.meta.recipeCount)===1?'Rezept':'Rezepte'}</span><span aria-hidden="true">·</span><span>Küchenwissen</span><span aria-hidden="true">·</span><span>Portionsrechner</span></div></div><div class="hero-art" aria-hidden="true"></div></div></div></section>
-<div class="shell workspace"><aside class="filters" aria-label="Rezeptfilter"><div class="filter-title"><strong>Filtern</strong><button class="link-btn" id="resetFilters" type="button">Zurücksetzen</button></div><div class="field"><label for="searchInput">Suche</label><input class="control" id="searchInput" type="search" placeholder="Gericht oder Zutat …" value="${esc(state.query)}"></div><div class="filter-grid-mobile"><div class="field"><label for="categoryPicker">Kategorie</label>${categoryPickerHtml()}</div><div class="field"><label for="cuisinePicker">Hauptküche</label>${cuisinePickerHtml()}</div><div class="field"><label for="durationPicker">Max. Gesamtdauer</label>${durationPickerHtml()}<div class="filter-note">Zeit ca.; aus den Rezeptangaben und Arbeitsschritten abgeleitet.</div></div></div><div class="field"><label for="ingredientInput">Zutaten</label><div class="ingredient-wrap"><input class="control" id="ingredientInput" autocomplete="off" placeholder="z. B. Spargel, Lachs …"><div class="suggestions" id="ingredientSuggestions"></div></div><div class="filter-note">Mehrere Zutaten werden mit UND verknüpft.</div><div class="chips" id="ingredientChips"></div></div></aside><section class="catalog"><div class="catalog-head"><div><h2>Rezeptarchiv</h2><p id="resultCount"></p></div><div class="sort-field"><label for="sortPicker">Sortieren</label>${sortPickerHtml()}</div></div><div id="recipeResults"></div></section></div>`;
+<div class="shell workspace">
+  <button class="filter-backdrop" id="filterBackdrop" type="button" aria-label="Filter schließen"></button>
+  <aside class="filters" id="recipeFilters" aria-label="Rezeptfilter">
+    <div class="filter-title"><div><span>Rezeptauswahl</span><strong>Filter</strong></div><div class="filter-title-actions"><button class="link-btn" id="resetFilters" type="button">Zurücksetzen</button><button class="filter-close" id="closeFilters" type="button" aria-label="Filter schließen">×</button></div></div>
+    <div class="field"><label for="searchInput">Suche</label><input class="control" id="searchInput" type="search" placeholder="Gericht oder Zutat …" value="${esc(state.query)}"></div>
+    <div class="filter-grid-mobile">
+      <div class="field"><label for="categoryPicker">Kategorie</label>${categoryPickerHtml()}</div>
+      <div class="field"><label for="cuisinePicker">Hauptküche</label>${cuisinePickerHtml()}</div>
+      <div class="field"><label for="durationPicker">Max. Gesamtdauer</label>${durationPickerHtml()}<div class="filter-note">Zeit ca.; aus Rezeptangaben und Arbeitsschritten abgeleitet.</div></div>
+    </div>
+    <div class="field"><label for="ingredientInput">Zutaten</label><div class="ingredient-wrap"><input class="control" id="ingredientInput" autocomplete="off" placeholder="z. B. Spargel, Lachs …"><div class="suggestions" id="ingredientSuggestions"></div></div><div class="filter-note">Mehrere Zutaten werden mit UND verknüpft.</div><div class="chips" id="ingredientChips"></div></div>
+    <div class="filter-drawer-footer"><button type="button" id="filterApply">Rezepte anzeigen</button></div>
+  </aside>
+  <section class="catalog">
+    <div class="catalog-head"><div><span class="category">Archiv</span><h2>Rezeptarchiv</h2><p id="resultCount"></p></div><div class="archive-toolbar"><button class="filter-open-button" id="openFilters" type="button" aria-controls="recipeFilters" aria-expanded="false">Filter <span id="filterCountBadge" hidden></span></button><div class="sort-field"><span>Sortieren</span>${sortPickerHtml()}</div></div></div>
+    <div class="active-filter-bar" id="activeFilters" aria-label="Aktive Filter">${activeFiltersHtml()}</div>
+    <div id="recipeResults"></div>
+  </section>
+</div>`;
 const search=document.getElementById('searchInput');
 search.addEventListener('input',e=>{state.query=e.target.value;state.visible=PAGE_SIZE;updateResults()});
-document.getElementById('resetFilters').addEventListener('click',()=>{state.query='';state.category='';state.cuisine='';state.duration='';state.ingredients=[];state.sort='title';state.visible=PAGE_SIZE;renderRecipes()});bindCategoryPicker();bindCuisinePicker();bindDurationPicker();bindSortPicker();setupIngredientInput();renderIngredientChips();updateResults();}
+document.getElementById('resetFilters').addEventListener('click',resetRecipeFilters);
+document.getElementById('openFilters').addEventListener('click',openRecipeFilters);
+document.getElementById('closeFilters').addEventListener('click',()=>closeRecipeFilters());
+document.getElementById('filterBackdrop').addEventListener('click',()=>closeRecipeFilters());
+document.getElementById('filterApply').addEventListener('click',()=>closeRecipeFilters());
+document.getElementById('recipeFilters').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeRecipeFilters()}});
+bindCategoryPicker();bindCuisinePicker();bindDurationPicker();bindSortPicker();setupIngredientInput();renderIngredientChips();renderActiveFilters();updateResults();}
 function setupIngredientInput(){const inp=document.getElementById('ingredientInput'),box=document.getElementById('ingredientSuggestions');inp.addEventListener('input',()=>{const q=norm(inp.value),chosen=new Set(state.ingredients.map(norm));const hits=q?DATA.ingredientIndex.filter(x=>!chosen.has(norm(x.name))&&norm(x.name).includes(q)).slice(0,12):DATA.ingredientIndex.filter(x=>!chosen.has(norm(x.name))).slice(0,12);box.innerHTML=hits.map(x=>`<button type="button" data-ing="${esc(x.name)}"><span>${esc(x.name)}</span><small>${x.count}</small></button>`).join('');box.classList.toggle('open',!!hits.length);box.querySelectorAll('[data-ing]').forEach(b=>b.addEventListener('click',()=>addIngredient(b.dataset.ing)))});inp.addEventListener('focus',()=>inp.dispatchEvent(new Event('input')));document.addEventListener('click',e=>{if(!e.target.closest('.ingredient-wrap'))box.classList.remove('open')},{once:false});}
 function addIngredient(name){if(!state.ingredients.some(x=>norm(x)===norm(name)))state.ingredients.push(name);document.getElementById('ingredientInput').value='';document.getElementById('ingredientSuggestions').classList.remove('open');state.visible=PAGE_SIZE;renderIngredientChips();updateResults()}
 function renderIngredientChips(){const c=document.getElementById('ingredientChips');if(!c)return;c.innerHTML=state.ingredients.map((x,i)=>`<span class="chip">${esc(x)}<button type="button" data-remove="${i}" aria-label="${esc(x)} entfernen">×</button></span>`).join('');c.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{state.ingredients.splice(Number(b.dataset.remove),1);renderIngredientChips();updateResults()}))}
@@ -174,7 +249,23 @@ function disconnectRecipeObserver(){if(recipeObserver){recipeObserver.disconnect
 function bindRecipeGridClicks(out){if(out.dataset.clickBound)return;out.dataset.clickBound='1';out.addEventListener('click',e=>{const card=e.target.closest('[data-recipe]');if(card)openRecipe(card.dataset.recipe)})}
 function observeRecipeSentinel(list,out){disconnectRecipeObserver();const sentinel=out.querySelector('#recipeSentinel');if(!sentinel)return;if(!('IntersectionObserver' in window)){sentinel.innerHTML='<button class="secondary-btn" type="button">Weitere Rezepte laden</button>';sentinel.querySelector('button').addEventListener('click',()=>appendRecipeBatch(list,out));return}recipeObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))appendRecipeBatch(list,out)},{root:null,rootMargin:'700px 0px',threshold:0});recipeObserver.observe(sentinel)}
 function appendRecipeBatch(list,out){const grid=out.querySelector('.recipe-grid');const sentinel=out.querySelector('#recipeSentinel');if(!grid||!sentinel)return;const start=grid.children.length;if(start>=list.length){sentinel.remove();disconnectRecipeObserver();return}const end=Math.min(start+PAGE_SIZE,list.length);grid.insertAdjacentHTML('beforeend',list.slice(start,end).map(cardHtml).join(''));state.visible=end;if(end>=list.length){sentinel.remove();disconnectRecipeObserver()}}
-function updateResults(){const list=filteredRecipes(),count=document.getElementById('resultCount'),out=document.getElementById('recipeResults');if(!count||!out)return;disconnectRecipeObserver();count.textContent=`${fmtInt(list.length)} von ${fmtInt(DATA.meta.recipeCount)} ${Number(DATA.meta.recipeCount)===1?'Rezept':'Rezepten'}`;if(!list.length){out.innerHTML='<div class="empty">Keine Rezepte passen zu dieser Filterkombination.</div>';return}state.visible=Math.min(Math.max(PAGE_SIZE,state.visible),list.length);const shown=list.slice(0,state.visible);out.innerHTML=`<div class="recipe-grid">${shown.map(cardHtml).join('')}</div>${shown.length<list.length?'<div class="infinite-sentinel" id="recipeSentinel" role="status" aria-label="Weitere Rezepte werden automatisch geladen"><span></span></div>':''}`;bindRecipeGridClicks(out);observeRecipeSentinel(list,out)}
+function updateResults(){
+  const list=filteredRecipes(),count=document.getElementById('resultCount'),out=document.getElementById('recipeResults');
+  if(!count||!out)return;
+  disconnectRecipeObserver();
+  count.textContent=`${fmtInt(list.length)} von ${fmtInt(DATA.meta.recipeCount)} ${Number(DATA.meta.recipeCount)===1?'Rezept':'Rezepten'}`;
+  const apply=document.getElementById('filterApply');if(apply)apply.textContent=`${fmtInt(list.length)} ${list.length===1?'Rezept':'Rezepte'} anzeigen`;
+  renderActiveFilters();
+  if(!list.length){
+    out.innerHTML='<div class="empty archive-empty"><strong>Keine passenden Rezepte</strong><span>Entferne einen Filter oder ändere deine Suche.</span><button type="button" class="secondary-btn" id="emptyResetFilters">Filter zurücksetzen</button></div>';
+    document.getElementById('emptyResetFilters')?.addEventListener('click',resetRecipeFilters);
+    return;
+  }
+  state.visible=Math.min(Math.max(PAGE_SIZE,state.visible),list.length);
+  const shown=list.slice(0,state.visible);
+  out.innerHTML=`<div class="recipe-grid">${shown.map(cardHtml).join('')}</div>${shown.length<list.length?'<div class="infinite-sentinel" id="recipeSentinel" role="status" aria-label="Weitere Rezepte werden automatisch geladen"><span></span></div>':''}`;
+  bindRecipeGridClicks(out);observeRecipeSentinel(list,out)
+}
 function stepsHtml(lines){return `<ol class="steps">${lines.map(x=>`<li><span>${glossaryHtml(x)}</span></li>`).join('')}</ol>`}
 function tableFactor(table,target,main){if(main.scaleType==='factor')return target;if(main.scaleType==='portions'&&table.scaleType==='portions')return target/table.baseScale;return target/main.baseScale}
 function ingredientsHtml(table,target,main){const factor=tableFactor(table,target,main);let lastGroup='',out='<ul class="ingredients">';table.ingredients.forEach(i=>{if(i.group&&i.group!==lastGroup){out+=`<li class="ing-group">${esc(i.group)}</li>`;lastGroup=i.group}const a=scaledAmount(i.quantity,factor);out+=`<li class="ingredient"><span class="amount">${a}${i.unit?`<span class="unit">${esc(displayUnit(i.unit))}</span>`:''}</span><span class="ingredient-name">${glossaryHtml(i.article)}</span></li>`});return out+'</ul>'}
