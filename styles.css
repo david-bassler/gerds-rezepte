@@ -238,3 +238,22 @@ body.has-hero:not([data-route]), body.has-hero{}
   .subrecipe summary>small{display:none}
 }
 @media print{.detail-command-bar,.detail-overflow{display:none!important}}
+
+/* UI-System: klare Rollen für Aktion, Filter und Utility */
+:root{
+  --control-radius:10px;
+  --panel-radius:16px;
+  --menu-radius:12px;
+  --focus-ring:0 0 0 3px rgba(49,93,71,.13);
+  --control-border:rgba(41,72,58,.2);
+  --control-hover:#f1f3ef;
+}
+button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #315d47;outline-offset:2px}
+.primary-btn,.secondary-btn{border-radius:var(--control-radius);padding:10px 14px;font-weight:750}
+.primary-btn{background:#29483a;color:#fff;border-color:#29483a}
+.primary-btn:hover{background:#203e32}
+.secondary-btn{background:#fff;color:#29483a;border-color:var(--control-border)}
+.secondary-btn:hover{background:var(--control-hover)}
+.link-btn{border-radius:7px}
+.control{border-radius:var(--control-radius)}
+.chip,.mini-tag{border-radius:999px}
