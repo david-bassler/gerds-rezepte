@@ -524,8 +524,8 @@ async function toggleDone(key){
 
 function ensureNav(){
   const nav=document.querySelector('.topbar .nav');if(!nav)return;
-  if(!nav.querySelector('[data-list-route="favorites"]'))nav.insertAdjacentHTML('beforeend','<button type="button" class="nav-list-button" data-list-route="favorites">Favoriten <span class="nav-count" data-fav-count></span></button><button type="button" class="nav-list-button" data-list-route="shopping">Einkaufsliste <span class="nav-count" data-shop-count></span></button>');
-  nav.querySelectorAll('[data-list-route]').forEach(btn=>{if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>showList(btn.dataset.listRoute))});
+  if(!nav.querySelector('[data-list-route="favorites"]'))nav.insertAdjacentHTML('beforeend','<button type="button" class="nav-list-button nav-utility-item" data-list-route="favorites">Favoriten <span class="nav-count" data-fav-count></span></button><button type="button" class="nav-list-button nav-utility-item" data-list-route="shopping">Einkaufsliste <span class="nav-count" data-shop-count></span></button>');
+  nav.querySelectorAll('[data-list-route]').forEach(btn=>{if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>{document.querySelector('.topbar')?.classList.remove('nav-open');document.getElementById('navToggle')?.setAttribute('aria-expanded','false');showList(btn.dataset.listRoute)})});
   updateCounts();
 }
 function updateCounts(){document.querySelectorAll('[data-fav-count]').forEach(x=>{x.textContent=favorites.size;x.hidden=!favorites.size});document.querySelectorAll('[data-shop-count]').forEach(x=>{x.textContent=shopping.length;x.hidden=!shopping.length})}
@@ -535,10 +535,12 @@ function showList(route,{write=true}={}){if(write)history.pushState({route},'',r
 function favoriteCard(r){return RecipeCard.render(r)}
 function renderFavorites(){
   const app=document.getElementById('app'),rows=DATA.recipes.filter(r=>favorites.has(r.id)).sort((a,b)=>a.title.localeCompare(b.title,'de'));
-  app.innerHTML=`<div class="list-page"><div class="shell"><div class="list-head"><div><span class="category">Gespeichert auf diesem Gerät</span><h1>Favoriten</h1><p>${rows.length?`${rows.length} gespeicherte${rows.length===1?'s Rezept':' Rezepte'}`:'Noch keine Rezepte gespeichert.'}</p></div>${rows.length?'<div class="list-actions"><button type="button" id="clearFavorites">Alle entfernen</button></div>':''}</div>${rows.length?`<div class="favorite-grid">${rows.map(favoriteCard).join('')}</div>`:'<div class="favorite-empty">Mit dem Lesezeichen-Symbol auf einer Rezeptkarte oder in der Detailansicht kannst du Rezepte hier ablegen.</div>'}</div></div>`;
+  const countText=rows.length?`${rows.length} gespeicherte${rows.length===1?'s Rezept':' Rezepte'}`:'Noch keine Rezepte gespeichert.';
+  const actions=rows.length?`<details class="favorite-actions-menu"><summary aria-label="Weitere Favoritenaktionen" title="Weitere Aktionen">•••</summary><div class="favorite-actions-panel"><button type="button" class="is-danger" id="clearFavorites">Alle Favoriten entfernen</button></div></details>`:'';
+  app.innerHTML=`<div class="list-page favorite-page"><div class="shell"><div class="list-head favorite-head"><div><span class="category">Meine Sammlung</span><h1>Favoriten</h1><p>${countText}</p></div>${actions}</div>${rows.length?`<div class="favorite-intro">Rezepte, die du für später gespeichert hast.</div><div class="favorite-grid">${rows.map(favoriteCard).join('')}</div>`:'<div class="favorite-empty"><strong>Noch nichts gespeichert</strong><span>Mit dem Stern auf einer Rezeptkarte oder in der Detailansicht kannst du Rezepte hier sammeln.</span></div>'}</div></div>`;
   app.querySelectorAll('[data-recipe]').forEach(b=>b.addEventListener('click',()=>{history.pushState({route:'detail',id:b.dataset.recipe,fromArchive:false},'',`#rezept=${encodeURIComponent(b.dataset.recipe)}`);location.reload()}));
   app.querySelectorAll('[data-favorite]').forEach(b=>{syncCardFavoriteButton(b,b.dataset.favorite);b.addEventListener('click',e=>{e.stopPropagation();toggleFavorite(b.dataset.favorite)})});
-  document.getElementById('clearFavorites')?.addEventListener('click',async()=>{favorites.clear();await clear(FAVORITES);updateCounts();renderFavorites()});
+  document.getElementById('clearFavorites')?.addEventListener('click',async()=>{if(!window.confirm('Alle Favoriten entfernen?'))return;favorites.clear();await clear(FAVORITES);updateCounts();renderFavorites()});
 }
 function renderShopping(){
   const app=document.getElementById('app'),rows=[...shopping].sort((a,b)=>Number(a.done)-Number(b.done)||a.article.localeCompare(b.article,'de'));
