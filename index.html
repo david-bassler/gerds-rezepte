@@ -46,9 +46,10 @@
         <span class="brand-mark" aria-hidden="true"><img src="assets/images/logo-kitchen.svg" alt=""></span>
         <span class="brand-copy"><strong>Gerds Rezepte</strong><small>Ein kuratiertes Rezeptarchiv aus über 50 Jahren Küche</small></span>
       </button>
-      <nav class="nav" aria-label="Hauptnavigation">
-        <button type="button" data-route="recipes">Rezepte</button>
-        <button type="button" data-route="knowledge">Küchenwissen</button>
+      <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="siteNav"><span aria-hidden="true"></span><strong>Menü</strong></button>
+      <nav class="nav" id="siteNav" aria-label="Hauptnavigation">
+        <button type="button" class="nav-main-item" data-route="recipes">Rezepte</button>
+        <button type="button" class="nav-main-item" data-route="knowledge">Küchenwissen</button>
       </nav>
     </div>
   </header>
