@@ -323,7 +323,36 @@ function renderDetail(id){
   renderIngredients(r,target);scrollTo({top:0,behavior:'smooth'})
 }
 function renderIngredients(r,target){document.getElementById('mainIngredients').innerHTML=ingredientsHtml(r,target,r);const advice=document.getElementById('mainSeasoningAdvice');if(advice)advice.innerHTML=seasoningAdviceHtml(r,target,r);const sub=document.getElementById('subrecipes');if(!sub)return;sub.innerHTML=r.subrecipes.map((s,i)=>{const stepCount=(s.preparation?.length||0)+(s.cooking?.length||0);return `<details class="subrecipe" ${i===0&&r.subrecipes.length===1?'open':''}><summary><span>${esc(s.title||s.sheet)}</span><small>${stepCount} Schritt${stepCount===1?'':'e'}</small></summary><div class="sub-inner"><div><h3>Zutaten</h3>${ingredientsHtml(s,target,r)}${seasoningAdviceHtml(s,target,r)}${s.notes.length?`<div class="notes"><strong>Hinweise</strong>${s.notes.map(x=>`<p>${glossaryHtml(x)}</p>`).join('')}</div>`:''}</div><div>${s.preparation.length?`<h3>Vorbereitung</h3>${stepsHtml(s.preparation)}`:''}${s.cooking.length?`<h3 class="subrecipe-cooking-title">Zubereitung</h3>${stepsHtml(s.cooking)}`:''}</div></div></details>`}).join('')}
-function renderKnowledge(){setNav('knowledge');const f=DATA.knowledge.foreword,m=DATA.knowledge.measures,g=DATA.knowledge.methods;const groups=[...new Set(m.map(x=>x.section))];app.innerHTML=`<div class="knowledge"><div class="shell"><div class="knowledge-head"><span class="category">Aus dem Originalarchiv</span><h1>Küchenwissen</h1><p>Vorwort, Maße und Gewichte sowie Garmethoden aus den ergänzenden Blättern des Rezeptarchivs.</p></div><div class="knowledge-layout"><nav class="knowledge-nav"><a href="#vorwort">Vorwort</a><a href="#masse">Maße & Gewichte</a><a href="#garmethoden">Garmethoden</a></nav><div><section id="vorwort" class="knowledge-section"><h2>Vorwort</h2>${f.map(s=>`<article class="prose-card"><h3>${esc(s.title)}</h3>${s.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}</article>`).join('')}</section><section id="masse" class="knowledge-section"><h2>Maße & Gewichte</h2><div class="measure-scroll"><table class="measure-table"><thead><tr><th>Angabe</th><th>Entspricht</th><th>Hinweis</th></tr></thead><tbody>${groups.map(gr=>`<tr class="measure-group"><td colspan="3">${esc(gr)}</td></tr>${m.filter(x=>x.section===gr).map(x=>`<tr><td>${esc(x.left)}</td><td>${esc(x.middle)}</td><td>${esc(x.right)}</td></tr>`).join('')}`).join('')}</tbody></table></div></section><section id="garmethoden" class="knowledge-section"><h2>Garmethoden</h2><div class="method-grid">${g.map(x=>`<article class="method"><h3>${glossaryHtml(x.term)}</h3>${x.description.map(p=>`<p>${glossaryHtml(p)}</p>`).join('')}</article>`).join('')}</div></section></div></div></div></div>`}
+function renderKnowledge(){
+  setNav('knowledge');
+  const f=DATA.knowledge.foreword,m=DATA.knowledge.measures,g=DATA.knowledge.methods;
+  const groups=[...new Set(m.map(x=>x.section))];
+  app.innerHTML=`<div class="knowledge"><div class="shell">
+    <header class="knowledge-head"><span class="category">Aus dem Originalarchiv</span><h1>Küchenwissen</h1><p>Grundlagen, Maße und Garmethoden aus den ergänzenden Blättern des Rezeptarchivs.</p></header>
+    <div class="knowledge-layout">
+      <nav class="knowledge-nav" aria-label="Inhalt Küchenwissen">
+        <span>Inhalt</span>
+        <a href="#vorwort"><b>01</b> Grundlagen</a>
+        <a href="#masse"><b>02</b> Maße & Gewichte</a>
+        <a href="#garmethoden"><b>03</b> Garmethoden</a>
+      </nav>
+      <div class="knowledge-document">
+        <section id="vorwort" class="knowledge-section">
+          <div class="knowledge-section-head"><span>01</span><div><h2>Grundlagen</h2><p>Hinweise und Vorwort aus dem Originalarchiv.</p></div></div>
+          <div class="knowledge-prose">${f.map(s=>`<article><h3>${esc(s.title)}</h3>${s.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}</article>`).join('')}</div>
+        </section>
+        <section id="masse" class="knowledge-section">
+          <div class="knowledge-section-head"><span>02</span><div><h2>Maße & Gewichte</h2><p>Umrechnungen und Küchenmaße auf einen Blick.</p></div></div>
+          <div class="measure-scroll"><table class="measure-table"><thead><tr><th>Angabe</th><th>Entspricht</th><th>Hinweis</th></tr></thead><tbody>${groups.map(gr=>`<tr class="measure-group"><td colspan="3">${esc(gr)}</td></tr>${m.filter(x=>x.section===gr).map(x=>`<tr><td>${esc(x.left)}</td><td>${esc(x.middle)}</td><td>${esc(x.right)}</td></tr>`).join('')}`).join('')}</tbody></table></div>
+        </section>
+        <section id="garmethoden" class="knowledge-section">
+          <div class="knowledge-section-head"><span>03</span><div><h2>Garmethoden</h2><p>Begriffe aus der klassischen Küche, knapp erklärt.</p></div></div>
+          <div class="method-list">${g.map(x=>`<article class="method"><h3>${glossaryHtml(x.term)}</h3><div>${x.description.map(p=>`<p>${glossaryHtml(p)}</p>`).join('')}</div></article>`).join('')}</div>
+        </section>
+      </div>
+    </div>
+  </div></div>`
+}
 document.addEventListener('click',e=>{if(!e.target.closest('.glossary-term'))document.querySelectorAll('.glossary-term:focus').forEach(el=>el.blur())});
 function initialRoute(){const h=location.hash||'';const m=h.match(/^#rezept=(.+)$/);if(m){const id=decodeURIComponent(m[1]);if(DATA.recipes.some(r=>r.id===id)){writeHistory('detail',{id,replace:true,fromArchive:false});renderDetail(id);return}}if(h==='#kuechenwissen'){showKnowledge({replace:true});return}showRecipes({replace:true})}
 initialRoute();
