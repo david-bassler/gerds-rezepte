@@ -33,7 +33,7 @@ function collectAllSteps(){
     steps.push(...phaseSteps(section,label,'','main'));
   }
   [...document.querySelectorAll('#subrecipes .subrecipe')].forEach((details,subIndex)=>{
-    const source=text(details.querySelector(':scope > summary'))||'Unterrezept';
+    const source=text(details.querySelector(':scope > summary > span'))||text(details.querySelector(':scope > summary'))||'Unterrezept';
     const sourceKey=`sub:${subIndex}`;
     const inner=details.querySelector('.sub-inner');
     if(!inner)return;
@@ -73,7 +73,7 @@ function collectIngredients(scope='all'){
   if(scope==='all'||scope==='main')add('Hauptrezept',document.getElementById('mainIngredients'));
   [...document.querySelectorAll('#subrecipes .subrecipe')].forEach((details,index)=>{
     if(scope!=='all'&&scope!==`sub:${index}`)return;
-    add(text(details.querySelector(':scope > summary'))||'Unterrezept',details);
+    add(text(details.querySelector(':scope > summary > span'))||text(details.querySelector(':scope > summary'))||'Unterrezept',details);
   });
   return groups;
 }
@@ -81,7 +81,7 @@ function scopeTitle(scope,recipe){
   if(scope==='all'||scope==='main')return recipe?.title||'Rezept';
   const match=String(scope).match(/^sub:(\d+)$/);
   const details=match?document.querySelectorAll('#subrecipes .subrecipe')[Number(match[1])]:null;
-  return text(details?.querySelector(':scope > summary'))||recipe?.title||'Unterrezept';
+  return text(details?.querySelector(':scope > summary > span'))||text(details?.querySelector(':scope > summary'))||recipe?.title||'Unterrezept';
 }
 function ingredientHtml(groups){
   return groups.map(group=>`<section class="cook-ingredient-group"><h3>${esc(group.title)}</h3><ul>${group.rows.map(row=>`<li><strong>${esc(row.amount)}</strong><span>${esc(row.name)}</span></li>`).join('')}</ul></section>`).join('');
