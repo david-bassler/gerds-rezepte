@@ -31,6 +31,7 @@ let drag=null;
 let persistQueued=false;
 
 function isShoppingPage(){return location.hash==='#einkaufsliste'||document.body.dataset.route==='shopping'}
+function isSortMode(){return document.body.classList.contains('shopping-sort-mode')}
 function isDragging(){return document.body.classList.contains('shopping-drag-active')}
 function isEditing(){return !!document.querySelector('.shopping-row.is-editing')}
 function norm(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,' ').trim()}
@@ -275,7 +276,7 @@ function moveItemKeyboard(row,key){
   queuePersist(list);
 }
 function keyboardMove(event){
-  if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
+  if(!isSortMode()||!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
   const handle=event.currentTarget;
   const header=handle.closest('.shopping-category-header');
   const row=handle.closest('.shopping-row');
@@ -398,7 +399,7 @@ function finishDrag(cancel=false){
   queueSync();
 }
 function pointerDown(event){
-  if(!isShoppingPage()||isDragging()||isEditing())return;
+  if(!isShoppingPage()||!isSortMode()||isDragging()||isEditing())return;
   if(event.pointerType==='mouse'&&event.button!==0)return;
   const categoryHandle=event.target.closest('.shopping-category-drag');
   const rowHandle=event.target.closest('.shopping-drag-handle');
