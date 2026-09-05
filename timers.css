@@ -98,6 +98,8 @@
 .cook-timer-live-controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .cook-timer-live-controls button{border:1px solid rgba(41,72,58,.16);background:#f8f6f0;color:#29483a;border-radius:9px;padding:7px 9px;font:inherit;font-size:10px;font-weight:750;cursor:pointer}
 
+body.has-timer-dock .timer-permission{bottom:max(82px,calc(env(safe-area-inset-bottom) + 82px))}
+body.cook-mode-active.has-timer-dock .timer-permission{bottom:calc(142px + env(safe-area-inset-bottom))}
 @media(max-width:680px){
   .timer-dock{left:14px;right:14px;bottom:max(12px,env(safe-area-inset-bottom));max-width:none}
   .cook-mode-active .timer-dock{bottom:calc(78px + env(safe-area-inset-bottom));left:auto;right:14px;min-width:126px;max-width:180px}
