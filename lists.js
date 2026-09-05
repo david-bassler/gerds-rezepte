@@ -351,7 +351,7 @@ function updatePlanFromDetail(recipe,value,{immediate=false}={}){
 }
 
 function syncCardFavoriteButton(button,id){const saved=favorites.has(id),label=saved?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen';button.classList.toggle('is-saved',saved);button.textContent=saved?'★':'☆';button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(saved));button.title=label}
-function syncDetailFavoriteButton(button,id){const saved=favorites.has(id),label=saved?'Aus Favoriten entfernen':'Als Favorit speichern';button.classList.toggle('is-saved',saved);button.textContent=saved?'★ Gespeichert':'☆ Als Favorit speichern';button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(saved));button.title=label}
+function syncDetailFavoriteButton(button,id){const saved=favorites.has(id),label=saved?'Aus Favoriten entfernen':'Als Favorit speichern';button.classList.toggle('is-saved',saved);button.textContent=saved?'★ Favorit':'☆ Favorit';button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(saved));button.title=label}
 function syncFavoriteControls(id){document.querySelectorAll('[data-favorite]').forEach(button=>{if(button.dataset.favorite===id)syncCardFavoriteButton(button,id)});document.querySelectorAll('[data-detail-favorite]').forEach(button=>{if(button.dataset.detailFavorite===id)syncDetailFavoriteButton(button,id)})}
 async function toggleFavorite(id){
   const wasSaved=favorites.has(id);
@@ -399,7 +399,7 @@ function decorateRecipeNote(recipe){
   const hero=document.querySelector('.detail-hero');
   if(!hero||document.querySelector('[data-recipe-note]'))return;
   const value=noteText(recipe.id),hasNote=!!value.trim();
-  hero.insertAdjacentHTML('afterend',`<details class="personal-note${hasNote?' has-note':''}" data-recipe-note="${esc(recipe.id)}" ${hasNote?'open':''}><summary><span>Persönliche Notiz</span><small>${hasNote?'Notiz vorhanden':'Nur auf diesem Gerät'}</small></summary><div class="personal-note-body"><textarea data-recipe-note-text rows="4" maxlength="5000" placeholder="Zum Beispiel: nächstes Mal weniger Salz, länger im Ofen …">${esc(value)}</textarea><div class="personal-note-footer"><span data-recipe-note-status>${hasNote?'Gespeichert':'Wird nur auf diesem Gerät gespeichert'}</span><button type="button" data-recipe-note-clear ${hasNote?'':'hidden'}>Notiz löschen</button></div><div class="personal-note-print" aria-hidden="true"></div></div></details>`);
+  hero.insertAdjacentHTML('afterend',`<details class="personal-note${hasNote?' has-note':''}" data-recipe-note="${esc(recipe.id)}" ${hasNote?'open':''}><summary><span>Persönliche Notiz</span><small>${hasNote?'Vorhanden':'Optional · nur auf diesem Gerät'}</small></summary><div class="personal-note-body"><textarea data-recipe-note-text rows="4" maxlength="5000" placeholder="Zum Beispiel: nächstes Mal weniger Salz, länger im Ofen …">${esc(value)}</textarea><div class="personal-note-footer"><span data-recipe-note-status>${hasNote?'Gespeichert':'Wird nur auf diesem Gerät gespeichert'}</span><button type="button" data-recipe-note-clear ${hasNote?'':'hidden'}>Notiz löschen</button></div><div class="personal-note-print" aria-hidden="true"></div></div></details>`);
   const card=document.querySelector('[data-recipe-note]'),textarea=card?.querySelector('[data-recipe-note-text]'),status=card?.querySelector('[data-recipe-note-status]'),clearButton=card?.querySelector('[data-recipe-note-clear]'),print=card?.querySelector('.personal-note-print');
   if(!card||!textarea)return;
   const syncVisuals=()=>{
@@ -407,7 +407,7 @@ function decorateRecipeNote(recipe){
     card.classList.toggle('has-note',filled);
     if(clearButton)clearButton.hidden=!filled;
     const summaryState=card.querySelector('summary small');
-    if(summaryState)summaryState.textContent=filled?'Notiz vorhanden':'Nur auf diesem Gerät';
+    if(summaryState)summaryState.textContent=filled?'Vorhanden':'Optional · nur auf diesem Gerät';
     if(print)print.textContent=text;
   };
   syncVisuals();
@@ -584,8 +584,12 @@ function bindRecipePlanControls(r){
 }
 function decorateDetail(){
   const r=currentRecipe();if(!r)return;
-  const hero=document.querySelector('.detail-hero > div');
-  if(hero){let button=hero.querySelector('.detail-favorite');if(!button){hero.querySelector('.detail-meta')?.insertAdjacentHTML('afterend',`<button type="button" class="detail-favorite" data-detail-favorite="${esc(r.id)}"></button>`);button=hero.querySelector('.detail-favorite')}if(button){syncDetailFavoriteButton(button,r.id);if(!button.dataset.favoriteBound){button.dataset.favoriteBound='1';button.addEventListener('click',()=>toggleFavorite(r.id))}}}
+  const target=document.querySelector('.detail-command-secondary')||document.querySelector('.detail-main');
+  if(target){
+    let button=document.querySelector('.detail-favorite');
+    if(!button){target.insertAdjacentHTML('afterbegin',`<button type="button" class="detail-favorite" data-detail-favorite="${esc(r.id)}"></button>`);button=document.querySelector('.detail-favorite')}
+    if(button){syncDetailFavoriteButton(button,r.id);if(!button.dataset.favoriteBound){button.dataset.favoriteBound='1';button.addEventListener('click',()=>toggleFavorite(r.id))}}
+  }
   bindRecipePlanControls(r);
   decorateRecipeNote(r);
   decorateIngredients(r);
