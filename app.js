@@ -279,7 +279,7 @@ function flowIngredientText(table,index,target,main){
 }
 function flowTableHtml(table,target,main){
   const graph=table.processGraph;if(!graph||!Array.isArray(graph.steps))return '<div class="flow-empty">Für diesen Bestandteil sind noch keine Ablaufdaten vorhanden.</div>';
-  const setup=graph.steps.filter(step=>step.setup),steps=graph.steps.filter(step=>!step.setup);
+  const setup=graph.steps.filter(step=>step.setup),notes=graph.steps.filter(step=>step.note&&!step.setup),steps=graph.steps.filter(step=>!step.setup&&!step.note);
   if(!steps.length)return '<div class="flow-empty">Keine verknüpften Arbeitsschritte erkannt.</div>';
   const firstUse=new Map();
   steps.forEach((step,stepIndex)=>step.inputs.filter(input=>input.type==='ingredient').forEach(input=>{const ingredient=graph.ingredients.find(item=>item.id===input.ref);if(ingredient&&!firstUse.has(ingredient.sourceIndex))firstUse.set(ingredient.sourceIndex,stepIndex)}));
@@ -296,8 +296,8 @@ function flowTableHtml(table,target,main){
   }
   const ingredientCells=rowIndexes.map((sourceIndex,row)=>`<div class="flow-ingredient" style="grid-column:1;grid-row:${row+1}">${flowIngredientText(table,sourceIndex,target,main)}</div>`).join('');
   const blankCells=rowIndexes.map((_,row)=>steps.map((__,column)=>`<span class="flow-cell" aria-hidden="true" style="grid-column:${column+2};grid-row:${row+1}"></span>`).join('')).join('');
-  const actionCells=steps.map((step,column)=>{const span=spanByStep.get(step.id)||{start:1,end:1},rows=Math.max(1,span.end-span.start+1);return `<div class="flow-action" style="grid-column:${column+2};grid-row:${span.start}/span ${rows}" title="${esc(step.action)}"><b>${esc(step.label)}</b><small>${column+1}</small></div>`}).join('');
-  return `<div class="flow-sheet-shell"><div class="flow-sheet" style="min-width:${Math.max(760,300+steps.length*120)}px">${setup.length?`<div class="flow-setup-list">${setup.map((step,index)=>`<div class="flow-setup"><b>${index+1}</b><span>${glossaryHtml(step.action)}</span></div>`).join('')}</div>`:''}<div class="flow-grid" style="grid-template-columns:minmax(260px,300px) repeat(${steps.length},120px);grid-template-rows:repeat(${rowIndexes.length},minmax(46px,auto))">${ingredientCells}${blankCells}${actionCells}</div></div></div>`;
+  const actionCells=steps.map((step,column)=>{const span=spanByStep.get(step.id)||{start:1,end:1},rows=Math.max(1,span.end-span.start+1),kind=step.optional?' is-optional':'';return `<div class="flow-action${kind}" style="grid-column:${column+2};grid-row:${span.start}/span ${rows}" title="${esc(step.action)}"><b>${esc(step.label)}</b><small>${step.optional?'optional · ':''}${column+1}</small></div>`}).join('');
+  const metaRows=[...setup.map(step=>({step,label:'Setup'})),...notes.map(step=>({step,label:'Hinweis'}))];return `<div class="flow-sheet-shell"><div class="flow-sheet" style="min-width:${Math.max(760,300+steps.length*120)}px">${metaRows.length?`<div class="flow-setup-list">${metaRows.map(({step,label})=>`<div class="flow-setup"><b>${label}</b><span>${glossaryHtml(step.action)}</span></div>`).join('')}</div>`:''}<div class="flow-grid" style="grid-template-columns:minmax(260px,300px) repeat(${steps.length},120px);grid-template-rows:repeat(${rowIndexes.length},minmax(46px,auto))">${ingredientCells}${blankCells}${actionCells}</div></div></div>`;
 }
 function renderRecipeFlow(r,target){
   const root=document.getElementById('recipeFlow');if(!root)return;
