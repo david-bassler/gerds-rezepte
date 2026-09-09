@@ -269,6 +269,42 @@ function updateResults(){
 function stepsHtml(lines){return `<ol class="steps">${lines.map(x=>`<li><span>${glossaryHtml(x)}</span></li>`).join('')}</ol>`}
 function tableFactor(table,target,main){if(main.scaleType==='factor')return target;if(main.scaleType==='portions'&&table.scaleType==='portions')return target/table.baseScale;return target/main.baseScale}
 function ingredientsHtml(table,target,main){const factor=tableFactor(table,target,main);let lastGroup='',out='<ul class="ingredients">';table.ingredients.forEach(i=>{if(i.group&&i.group!==lastGroup){out+=`<li class="ing-group">${esc(i.group)}</li>`;lastGroup=i.group}const a=scaledAmount(i.quantity,factor);out+=`<li class="ingredient"><span class="amount">${a}${i.unit?`<span class="unit">${esc(displayUnit(i.unit))}</span>`:''}</span><span class="ingredient-name">${glossaryHtml(i.article)}</span></li>`});return out+'</ul>'}
+function flowIngredientText(table,index,target,main){
+  const ingredient=table.ingredients[index];if(!ingredient)return '';
+  const factor=tableFactor(table,target,main),amount=scaledAmount(ingredient.quantity,factor);
+  const unit=ingredient.unit?displayUnit(ingredient.unit):'';
+  const product=ingredient.product||ingredient.article||ingredient.label||'';
+  const state=ingredient.state?`, ${ingredient.state}`:'';
+  return `<strong>${amount}${unit?` ${esc(unit)}`:''}</strong><span>${glossaryHtml(product)}${state?`<small>${esc(state)}</small>`:''}</span>`;
+}
+function flowTableHtml(table,target,main){
+  const graph=table.processGraph;if(!graph||!Array.isArray(graph.steps))return '<div class="flow-empty">Für diesen Bestandteil sind noch keine Ablaufdaten vorhanden.</div>';
+  const setup=graph.steps.filter(step=>step.setup),steps=graph.steps.filter(step=>!step.setup);
+  if(!steps.length)return '<div class="flow-empty">Keine verknüpften Arbeitsschritte erkannt.</div>';
+  const firstUse=new Map();
+  steps.forEach((step,stepIndex)=>step.inputs.filter(input=>input.type==='ingredient').forEach(input=>{const ingredient=graph.ingredients.find(item=>item.id===input.ref);if(ingredient&&!firstUse.has(ingredient.sourceIndex))firstUse.set(ingredient.sourceIndex,stepIndex)}));
+  const rowIndexes=graph.ingredients.map(item=>item.sourceIndex).sort((a,b)=>(firstUse.get(a)??999)-(firstUse.get(b)??999)||a-b);
+  const rowBySource=new Map(rowIndexes.map((sourceIndex,row)=>[sourceIndex,row+1])),spanByStep=new Map();
+  for(let stepIndex=0;stepIndex<steps.length;stepIndex++){
+    const step=steps[stepIndex],rows=[];
+    for(const input of step.inputs){
+      if(input.type==='ingredient'){const ingredient=graph.ingredients.find(item=>item.id===input.ref),row=ingredient?rowBySource.get(ingredient.sourceIndex):null;if(row)rows.push(row)}
+      else if(input.type==='step'){const span=spanByStep.get(input.ref);if(span)rows.push(span.start,span.end)}
+    }
+    const previous=steps[stepIndex-1],previousSpan=previous?spanByStep.get(previous.id):null;
+    spanByStep.set(step.id,{start:rows.length?Math.min(...rows):(previousSpan?.start||1),end:rows.length?Math.max(...rows):(previousSpan?.end||1)});
+  }
+  const ingredientCells=rowIndexes.map((sourceIndex,row)=>`<div class="flow-ingredient" style="grid-column:1;grid-row:${row+1}">${flowIngredientText(table,sourceIndex,target,main)}</div>`).join('');
+  const blankCells=rowIndexes.map((_,row)=>steps.map((__,column)=>`<span class="flow-cell" aria-hidden="true" style="grid-column:${column+2};grid-row:${row+1}"></span>`).join('')).join('');
+  const actionCells=steps.map((step,column)=>{const span=spanByStep.get(step.id)||{start:1,end:1},rows=Math.max(1,span.end-span.start+1);return `<div class="flow-action" style="grid-column:${column+2};grid-row:${span.start}/span ${rows}" title="${esc(step.action)}"><b>${esc(step.label)}</b><small>${column+1}</small></div>`}).join('');
+  return `<div class="flow-sheet-shell"><div class="flow-sheet" style="min-width:${Math.max(760,300+steps.length*120)}px">${setup.length?`<div class="flow-setup-list">${setup.map((step,index)=>`<div class="flow-setup"><b>${index+1}</b><span>${glossaryHtml(step.action)}</span></div>`).join('')}</div>`:''}<div class="flow-grid" style="grid-template-columns:minmax(260px,300px) repeat(${steps.length},120px);grid-template-rows:repeat(${rowIndexes.length},minmax(46px,auto))">${ingredientCells}${blankCells}${actionCells}</div></div></div>`;
+}
+function renderRecipeFlow(r,target){
+  const root=document.getElementById('recipeFlow');if(!root)return;
+  const parts=[{table:r,label:r.subrecipes.length?'Hauptrezept':'Ablaufplan'},...r.subrecipes.map((table,index)=>({table,label:table.title||table.sheet||`Unterrezept ${index+1}`}))];
+  root.innerHTML=parts.map(({table,label})=>`<section class="flow-section"><div class="flow-section-head"><h2>${esc(label)}</h2><span>${table.processGraph?.steps?.length||0} Arbeitsschritte</span></div>${flowTableHtml(table,target,r)}</section>`).join('');
+}
+
 function renderDetail(id){
   const r=DATA.recipes.find(x=>x.id===id);if(!r)return;
   state.route='detail';setNav('recipes');
@@ -309,18 +345,25 @@ function renderDetail(id){
         <small id="scaleHint">Basisrezept: ${esc(baseLabel(r))}</small>
       </aside>
     </div>
-    <div class="recipe-content"><div><section class="section-card"><h2 class="section-title">Zutaten</h2><div id="mainIngredients"></div><div id="mainSeasoningAdvice"></div>${r.notes.length?`<div class="notes"><strong>Hinweise</strong>${r.notes.map(x=>`<p>${glossaryHtml(x)}</p>`).join('')}</div>`:''}</section></div><div>${r.preparation.length?`<section class="process-section"><h2 class="section-title">Vorbereitung</h2>${stepsHtml(r.preparation)}</section>`:''}${r.cooking.length?`<section class="process-section"><h2 class="section-title">Zubereitung</h2>${stepsHtml(r.cooking)}</section>`:''}<p class="fineprint">Quelle: Originalarchiv · ${esc(r.category)}. Zeitangaben sind teilweise aus ausdrücklich genannten Ruhe-/Garzeiten und Arbeitsschritten abgeleitet.</p></div></div>
-    ${r.subrecipes.length?`<section class="subrecipes subrecipes-full"><div class="subrecipes-heading"><span class="category">Bestandteile</span><h2 class="section-title">Unterrezepte</h2><p>Einzeln aufklappen oder direkt im eigenen Kochmodus zubereiten.</p></div><div id="subrecipes"></div></section>`:''}
+    <div class="recipe-view-switch"><span>Ansicht</span><div class="recipe-view-options" role="group" aria-label="Rezeptansicht"><button type="button" class="active" data-detail-view="classic" aria-pressed="true">Rezept</button><button type="button" data-detail-view="flow" aria-pressed="false">Ablaufplan</button></div></div>\n    <div class="recipe-content"><div><section class="section-card"><h2 class="section-title">Zutaten</h2><div id="mainIngredients"></div><div id="mainSeasoningAdvice"></div>${r.notes.length?`<div class="notes"><strong>Hinweise</strong>${r.notes.map(x=>`<p>${glossaryHtml(x)}</p>`).join('')}</div>`:''}</section></div><div>${r.preparation.length?`<section class="process-section"><h2 class="section-title">Vorbereitung</h2>${stepsHtml(r.preparation)}</section>`:''}${r.cooking.length?`<section class="process-section"><h2 class="section-title">Zubereitung</h2>${stepsHtml(r.cooking)}</section>`:''}<p class="fineprint">Quelle: Originalarchiv · ${esc(r.category)}. Zeitangaben sind teilweise aus ausdrücklich genannten Ruhe-/Garzeiten und Arbeitsschritten abgeleitet.</p></div></div>
+    <section class="recipe-flow-view" id="recipeFlowView" hidden><div id="recipeFlow"></div></section>\n    ${r.subrecipes.length?`<section class="subrecipes subrecipes-full"><div class="subrecipes-heading"><span class="category">Bestandteile</span><h2 class="section-title">Unterrezepte</h2><p>Einzeln aufklappen oder direkt im eigenen Kochmodus zubereiten.</p></div><div id="subrecipes"></div></section>`:''}
   </div></div>`;
   const input=document.getElementById('portionInput');
   function clamp(v){const min=r.scaleType==='batch'?0.1:r.scaleType==='factor'?0.25:1,max=r.scaleType==='factor'?20:100;v=Number(v);if(!Number.isFinite(v))v=r.scaleType==='factor'?1:r.baseScale;return Math.min(max,Math.max(min,v))}
-  function updateScale(v){target=clamp(v);input.value=r.scaleType==='portions'?String(Math.round(target)):String(Math.round(target*100)/100);renderIngredients(r,target);const f=r.scaleType==='factor'?target:target/r.baseScale;document.getElementById('scaleHint').textContent=`Faktor ${formatNumber(f)} × zur Basis (${baseLabel(r)})`;const ps=document.getElementById('printScaleSummary');if(ps)ps.textContent=r.scaleType==='batch'?`Mengen für ${formatNumber(target)} kg Ansatz`:r.scaleType==='factor'?`Mengen für ${formatNumber(target)} × Rezept`:`Mengen für ${portionLabel(target)}`}
+  function updateScale(v){target=clamp(v);input.value=r.scaleType==='portions'?String(Math.round(target)):String(Math.round(target*100)/100);renderIngredients(r,target);renderRecipeFlow(r,target);const f=r.scaleType==='factor'?target:target/r.baseScale;document.getElementById('scaleHint').textContent=`Faktor ${formatNumber(f)} × zur Basis (${baseLabel(r)})`;const ps=document.getElementById('printScaleSummary');if(ps)ps.textContent=r.scaleType==='batch'?`Mengen für ${formatNumber(target)} kg Ansatz`:r.scaleType==='factor'?`Mengen für ${formatNumber(target)} × Rezept`:`Mengen für ${portionLabel(target)}`}
   input.addEventListener('input',()=>updateScale(input.value));
   document.querySelectorAll('[data-step]').forEach(b=>b.addEventListener('click',()=>updateScale(target+Number(b.dataset.step))));
   document.getElementById('resetScale').addEventListener('click',()=>updateScale(r.scaleType==='factor'?1:r.baseScale));
   document.getElementById('printRecipe').addEventListener('click',()=>window.print());
   document.getElementById('detailBack').addEventListener('click',()=>{const h=history.state;if(h?.route==='detail'&&h.fromArchive)history.back();else showRecipes({replace:true})});
-  renderIngredients(r,target);scrollTo({top:0,behavior:'smooth'})
+  document.querySelectorAll('[data-detail-view]').forEach(button=>button.addEventListener('click',()=>{
+    const flow=button.dataset.detailView==='flow';
+    document.querySelector('.recipe-content')?.toggleAttribute('hidden',flow);
+    document.querySelector('.subrecipes-full')?.toggleAttribute('hidden',flow);
+    const flowView=document.getElementById('recipeFlowView');if(flowView)flowView.hidden=!flow;
+    document.querySelectorAll('[data-detail-view]').forEach(item=>{const active=item===button;item.classList.toggle('active',active);item.setAttribute('aria-pressed',String(active))});
+  }));
+  renderIngredients(r,target);renderRecipeFlow(r,target);scrollTo({top:0,behavior:'smooth'})
 }
 function renderIngredients(r,target){document.getElementById('mainIngredients').innerHTML=ingredientsHtml(r,target,r);const advice=document.getElementById('mainSeasoningAdvice');if(advice)advice.innerHTML=seasoningAdviceHtml(r,target,r);const sub=document.getElementById('subrecipes');if(!sub)return;sub.innerHTML=r.subrecipes.map((s,i)=>{const stepCount=(s.preparation?.length||0)+(s.cooking?.length||0);return `<details class="subrecipe" ${i===0&&r.subrecipes.length===1?'open':''}><summary><span>${esc(s.title||s.sheet)}</span><small>${stepCount} Schritt${stepCount===1?'':'e'}</small></summary><div class="sub-inner"><div><h3>Zutaten</h3>${ingredientsHtml(s,target,r)}${seasoningAdviceHtml(s,target,r)}${s.notes.length?`<div class="notes"><strong>Hinweise</strong>${s.notes.map(x=>`<p>${glossaryHtml(x)}</p>`).join('')}</div>`:''}</div><div>${s.preparation.length?`<h3>Vorbereitung</h3>${stepsHtml(s.preparation)}`:''}${s.cooking.length?`<h3 class="subrecipe-cooking-title">Zubereitung</h3>${stepsHtml(s.cooking)}`:''}</div></div></details>`}).join('')}
 function renderKnowledge(){
