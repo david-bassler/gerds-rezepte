@@ -26,3 +26,5 @@
 @media print{.recipe-view-switch,.recipe-flow-view{display:none!important}.recipe-content,.subrecipes-full{display:block!important}}
 
 .flow-action.is-optional{border-style:dashed;background:#fbfaf5}.flow-action.is-optional b{font-style:italic}.flow-setup b{min-width:46px;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+
+.beta-badge{display:inline-flex;align-items:center;justify-content:center;margin-left:5px;padding:1px 5px;border-radius:999px;font-size:8px;line-height:1.4;font-weight:850;letter-spacing:.06em;text-transform:uppercase;background:#e8e1cf;color:#76522f;vertical-align:1px}.recipe-view-options button.active .beta-badge{background:rgba(255,255,255,.18);color:#fff}
