@@ -1,7 +1,7 @@
 'use strict';
 
 const CACHE_PREFIX='gerds-rezepte-';
-const APP_VERSION='19';
+const APP_VERSION='20';
 const PRECACHE=`${CACHE_PREFIX}precache-v${APP_VERSION}`;
 const RUNTIME=`${CACHE_PREFIX}runtime-v${APP_VERSION}`;
 
