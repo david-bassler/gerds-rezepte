@@ -1,13 +1,13 @@
 'use strict';
 
 const CACHE_PREFIX='gerds-rezepte-';
-const APP_VERSION='18';
+const APP_VERSION='19';
 const PRECACHE=`${CACHE_PREFIX}precache-v${APP_VERSION}`;
 const RUNTIME=`${CACHE_PREFIX}runtime-v${APP_VERSION}`;
 
 const CODE_ASSETS=[
-  'styles.css','lists.css','nav-icons.css','shopping-ui.css','shopping-reorder.css','shopping-focus.css','pwa.css','personal-data.css','cook-mode.css','timers.css',
-  'recipes-data.js','data-fixes.js','editorial-fixes.js','shopping-eligibility.js','recipe-card.js','app.js','glossary-boundary-fixes.js','ingredient-ui.js','lists.js','shopping-ui.js','shopping-reorder.js','shopping-focus.js','timer-parser.js','timers.js','cook-mode.js','personal-data.js','pwa.js'
+  'styles.css','lists.css','nav-icons.css','shopping-ui.css','shopping-reorder.css','shopping-focus.css','pwa.css','personal-data.css','cook-mode.css','timers.css','recipe-flow.css',
+  'recipes-data.js','data-fixes.js','editorial-fixes.js','recipe-flow-data.js','shopping-eligibility.js','recipe-card.js','app.js','glossary-boundary-fixes.js','ingredient-ui.js','lists.js','shopping-ui.js','shopping-reorder.js','shopping-focus.js','timer-parser.js','timers.js','cook-mode.js','personal-data.js','pwa.js'
 ];
 const PRECACHE_URLS=[
   './','./index.html','./404.html','./site.webmanifest',
