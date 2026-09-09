@@ -24,3 +24,5 @@
 @media(max-width:820px){.recipe-view-switch{margin-top:28px}.flow-sheet{font-size:11px}.flow-ingredient,.flow-cell,.flow-action{min-height:43px}}
 @media(max-width:560px){.recipe-view-switch{align-items:flex-start}.recipe-view-options button{padding:7px 10px}.flow-section-head{display:block}.flow-section-head span{display:block;margin-top:4px}.flow-sheet-shell{margin-left:-14px;margin-right:-14px;border-radius:0}.flow-note{font-size:9px}}
 @media print{.recipe-view-switch,.recipe-flow-view{display:none!important}.recipe-content,.subrecipes-full{display:block!important}}
+
+.flow-action.is-optional{border-style:dashed;background:#fbfaf5}.flow-action.is-optional b{font-style:italic}.flow-setup b{min-width:46px;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
